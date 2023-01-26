@@ -21,4 +21,5 @@ build/a.out NUM_THREADS COMPRESSION_LEVEL FILENAME
 ## References
 
 Documentation: http://facebook.github.io/zstd/zstd_manual.html
+
 Example: https://github.com/facebook/zstd/blob/dev/examples/streaming_compression.c
