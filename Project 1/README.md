@@ -1,6 +1,10 @@
 # Project 1
 
-A multi-thread streaming compression demo using ZSTD_compressStream2 in zstd library.
+A multi-thread streaming compression demo using zstd library.
+
+The streamCompress function calls ZSTD_compressStream2 to handle the underlaying multithreading mechanism.
+
+ZSTD_compressStream2 is designed to work with streaming and multithreading situation.
 
 ## Compile
 
