@@ -7,7 +7,7 @@
 float a[N][N] __attribute__((aligned(16)));
 float b[N][N] __attribute__((aligned(16)));
 float c[N][N] __attribute__((aligned(16)));
-float d[N][N] __attribute__((aligned(16)));
+float c[N][N] __attribute__((aligned(16)));
 
 void randomize(float arr[N][N])
 {
@@ -30,7 +30,7 @@ void naive_mul()
         {
             for (k = 0; k < N; k++)
             {
-                d[i][j] = d[i][j] + a[i][k] * b[k][j];
+                c[i][j] = c[i][j] + a[i][k] * b[k][j];
             }
         }
     }
@@ -44,7 +44,7 @@ void simd_mul()
         {
             for (int k = 0; k < N; k += 4)
             {
-                __m128 r = _mm_load_ps(&d[i][j]);
+                __m128 r = _mm_load_ps(&c[i][j]);
                 __m128 s = _mm_load_ps(&a[i][k]);
                 __m128 b_0 = _mm_load_ps(&b[k][j + 0]);
                 __m128 b_1 = _mm_loadu_ps(&b[k][j + 1]);

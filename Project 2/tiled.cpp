@@ -8,7 +8,7 @@
 float A[N][N];
 float B[N][N];
 float C[N][N];
-float D[N][N];
+float c[N][N];
 
 void randomize(float arr[N][N])
 {
@@ -31,7 +31,7 @@ void naive_mul()
 		{
 			for (k = 0; k < N; k++)
 			{
-				D[i][j] = D[i][j] + A[i][k] * B[k][j];
+				c[i][j] = c[i][j] + A[i][k] * B[k][j];
 			}
 		}
 	}

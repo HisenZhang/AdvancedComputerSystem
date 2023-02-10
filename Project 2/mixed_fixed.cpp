@@ -3,13 +3,14 @@
 #include <stdlib.h>
 #include <time.h>
 
-#define N 1024 // 64 .. 2048
-#define BS 128/sizeof(int16_t)  // 32 512
+#define N 1024
+#define CACHELINE 64
+
+#define BS (CACHELINE / sizeof(int16_t))
 
 int16_t a[N][N] __attribute__((aligned(16)));
 int16_t b[N][N] __attribute__((aligned(16)));
 int16_t c[N][N] __attribute__((aligned(16)));
-int16_t d[N][N] __attribute__((aligned(16)));
 
 void randomize(int16_t arr[N][N])
 {
@@ -32,7 +33,7 @@ void naive_mul()
 		{
 			for (k = 0; k < N; k++)
 			{
-				d[i][j] = d[i][j] + a[i][k] * b[k][j];
+				c[i][j] = c[i][j] + a[i][k] * b[k][j];
 			}
 		}
 	}
@@ -53,7 +54,7 @@ void mixed_mul(int blockSize)
 					{
 						for (k = kk; k < kk + blockSize && k < N; k+=8)
 						{
-							__m128i r = _mm_loadu_si128((__m128i*)&d[i][j]);
+							__m128i r = _mm_loadu_si128((__m128i*)&c[i][j]);
                             __m128i s = _mm_loadu_si128((__m128i*)&a[i][k]);
                             __m128i b_0 = _mm_loadu_si128((__m128i*)&b[k][j+0]);
                             __m128i b_1 = _mm_loadu_si128((__m128i*)&b[k][j+1]);
@@ -84,7 +85,7 @@ void simd_mul()
         {
             for (int k = 0; k < N; k += 8)
             {
-                __m128i r = _mm_load_si128((__m128i*)&d[i][j]);
+                __m128i r = _mm_load_si128((__m128i*)&c[i][j]);
                 __m128i s = _mm_load_si128((__m128i*)&a[i][k]);
                 __m128i b_0 = _mm_load_si128((__m128i*)&b[k][j+0]);
                 __m128i b_1 = _mm_loadu_si128((__m128i*)&b[k][j+1]);

@@ -7,7 +7,7 @@
 int16_t a[N][N] __attribute__((aligned(16)));
 int16_t b[N][N] __attribute__((aligned(16)));
 int16_t c[N][N] __attribute__((aligned(16)));
-int16_t d[N][N] __attribute__((aligned(16)));
+int16_t c[N][N] __attribute__((aligned(16)));
 
 void randomize(int16_t arr[N][N])
 {
@@ -30,7 +30,7 @@ void naive_mul()
         {
             for (k = 0; k < N; k++)
             {
-                d[i][j] = d[i][j] + a[i][k] * b[k][j];
+                c[i][j] = c[i][j] + a[i][k] * b[k][j];
             }
         }
     }
@@ -45,7 +45,7 @@ void simd_mul()
             for (int k = 0; k < N; k += 8)
             {         
                 
-                __m128i r = _mm_load_si128((__m128i*)&d[i][j]);
+                __m128i r = _mm_load_si128((__m128i*)&c[i][j]);
                 __m128i s = _mm_load_si128((__m128i*)&a[i][k]);
                 __m128i b_0 = _mm_load_si128((__m128i*)&b[k][j+0]);
                 __m128i b_1 = _mm_loadu_si128((__m128i*)&b[k][j+1]);
