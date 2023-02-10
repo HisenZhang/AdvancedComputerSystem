@@ -4,7 +4,7 @@
 #include <time.h>
 
 #define N 1024 // 64 .. 2048
-#define BS 4  // 32 512
+#define BS 128/sizeof(float)   // 32 512
 
 float a[N][N];
 float b[N][N];

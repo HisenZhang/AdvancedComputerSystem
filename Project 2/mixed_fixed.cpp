@@ -4,7 +4,7 @@
 #include <time.h>
 
 #define N 1024 // 64 .. 2048
-#define BS 4  // 32 512
+#define BS 128/sizeof(int16_t)  // 32 512
 
 int16_t a[N][N] __attribute__((aligned(16)));
 int16_t b[N][N] __attribute__((aligned(16)));
