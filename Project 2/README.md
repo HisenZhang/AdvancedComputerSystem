@@ -5,11 +5,13 @@ Matrix-Matrix Multiplication with SIMD Instructions & Cache Miss Minimization
 ## Compile
 
 ```bash
+g++ mixed.cpp -o build/mixed -mavx
 ```
 
 ## Run
 
 ```bash
+./build/mixed 
 ```
 
 ## References
