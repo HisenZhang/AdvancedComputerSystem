@@ -7,6 +7,20 @@
 
 using namespace std;
 
+template <typename T>
+int vectorWrite(vector<T> vec, char fn[])
+{
+    FILE *outdata = fopen(fn, "wb");
+    if (outdata == NULL)
+    {
+        perror("Error opening the file.\n");
+        return -1;
+    }
+    fwrite(&vec[0], sizeof(T), vec.size(), outdata);
+    fclose(outdata);
+    return 0;
+}
+
 int main(int argc, char const *argv[])
 {
     unordered_map<string, int> index;
@@ -29,15 +43,7 @@ int main(int argc, char const *argv[])
     cout << "Encoding completed: " << encoded.size() << " entries." << endl;
 
     // output using fwrite to reduce overhead
-
-    FILE *outdata = fopen("../data/encoded.bin", "wb");
-    if (outdata == NULL)
-    {
-        perror("Error opening the file.\n");
-        return -1;
-    }
-    fwrite(&encoded[0], sizeof(int), encoded.size(), outdata);
-    fclose(outdata);
+    vectorWrite(encoded, "../data/encoded.bin");
 
     cout << "Encoded data saved." << endl;
 
