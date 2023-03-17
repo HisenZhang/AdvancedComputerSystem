@@ -75,7 +75,7 @@ void Trie::prefix_search(string &prefix, vector<int> &result)
     {
         int index = prefix[i] - 'a';
         if (!pCrawl->children[index])
-            break;
+            return;
         pCrawl = pCrawl->children[index];
     }
 
