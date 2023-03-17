@@ -5,6 +5,7 @@
 #include <fstream>
 #include <stdio.h>
 #include <sys/stat.h>
+#include <immintrin.h>
 #include "trie.h"
 
 using namespace std;
@@ -126,6 +127,8 @@ void save()
     cout << "Encoded dictionary saved." << endl;
 }
 
+#ifndef SIMD
+
 bool find(string key)
 {
     if (dict.find(key) == dict.end())
@@ -146,11 +149,61 @@ bool find(string key)
     return true;
 }
 
+#else
+
+bool find(string key)
+{
+    if (dict.find(key) == dict.end())
+    {
+        cout << "Key not found." << endl;
+        return false;
+    }
+    int code = dict[key];
+    cout << code << ":" << key << " @ ";
+
+    vector<int> loc;
+    int mask;
+    int total;
+    char *base = (char *)(&encoded[0]);
+    char *end = base + (encoded.size() * sizeof(int));
+    char *dataptr = base;
+    // assert(size % 16 == 0);
+
+    __m256i tocmp = _mm256_set1_epi32(code);
+    while (dataptr < end)
+    {
+        __m256i chunk = _mm256_loadu_si256((__m256i const *)dataptr);
+        __m256i results = _mm256_cmpeq_epi32(chunk, tocmp);
+        mask = _mm256_movemask_epi8(results);
+
+        if (mask)
+        {
+            for (size_t i = 0; i < 8; i++)
+            {
+                if (mask >> (4 * i) & 0xf == 0xf)
+                    loc.push_back(((dataptr + sizeof(int) * i) - base) / sizeof(int));
+            }
+        }
+        dataptr += 8 * sizeof(int);
+    }
+
+    for (size_t i = 0; i < loc.size(); i++)
+    {
+        cout << loc[i] << ' ';
+    }
+    cout << endl;
+
+    return true;
+}
+
+#endif
+
 bool query()
 {
     string key;
     cin >> key;
     return find(key);
+    // return find(key);
 }
 
 void prefixQuery()
