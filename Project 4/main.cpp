@@ -137,7 +137,7 @@ bool find(string key)
         return false;
     }
     int code = dict[key];
-    cout << "@ ";
+    cout << code << ":" << key << " @ ";
     for (size_t i = 0; i < encoded.size(); i++)
     {
         if (code == encoded[i])
@@ -203,7 +203,6 @@ bool query()
     string key;
     cin >> key;
     return find(key);
-    // return find(key);
 }
 
 void prefixQuery()
@@ -214,18 +213,29 @@ void prefixQuery()
     tree.prefix_search(data, result);
     for (const auto r : result)
     {
-        cout << r << ":" << dict_decode[r] << " ";
         find(dict_decode[r]);
     }
 }
 
 int main(int argc, char const *argv[])
 {
+    if (argc < 2)
+    {
+        cout << "Usage: " << argv[0] << " INFILE" << endl;
+        return EXIT_SUCCESS;
+    }
+
     char *buf;
     char opt = 0;
 
-    puts("===MENU===\n0. Exit\n1. Encode\n2. Save\n3. Load\n4. Query\n5. Prefix Query");
-    puts("> ");
+    cout << "===MENU===\n"
+         << "0. Exit\n"
+         << "1. Encode\n"
+         << "2. Save\n"
+         << "3. Load\n"
+         << "4. Query\n"
+         << "5. Prefix Query" << endl;
+    cout << "> ";
     while (cin >> opt)
     {
         switch (opt)
@@ -252,7 +262,7 @@ int main(int argc, char const *argv[])
             puts("Invalid option.");
             break;
         }
-        puts("> ");
+        cout << "> ";
     }
-    return 0;
+    return EXIT_SUCCESS;
 }
