@@ -4,6 +4,7 @@
 #include <unordered_map>
 #include <fstream>
 #include <stdio.h>
+#include <sys/stat.h>
 #include "trie.h"
 
 using namespace std;
@@ -15,7 +16,7 @@ int entries = 0;
 Trie tree;
 
 template <typename T>
-int vectorWrite(vector<T> vec, char fn[])
+int vectorWrite(vector<T> &vec, char fn[])
 {
     FILE *outdata = fopen(fn, "wb");
     if (outdata == NULL)
@@ -28,8 +29,44 @@ int vectorWrite(vector<T> vec, char fn[])
     return 0;
 }
 
-void encode(char fn[])
+long getFileSize(char *fn)
 {
+    struct stat stat_buf;
+    int rc = stat(fn, &stat_buf);
+    return rc == 0 ? stat_buf.st_size : -1;
+}
+
+template <typename T>
+int vectorRead(vector<T> &vec, char *fn)
+{
+    FILE *indata = fopen(fn, "rb");
+    if (indata == NULL)
+    {
+        perror("Error opening the file.\n");
+        return -1;
+    }
+    int count = getFileSize(fn) / sizeof(T);
+    vec.reserve(count);
+    int buf = 0;
+
+    for (size_t i = 0; i < count; i++)
+    {
+        fread(&buf, sizeof(T), 1, indata);
+        vec.emplace_back(buf);
+    }
+
+    fclose(indata);
+    return 0;
+}
+
+void encode(const char *fn)
+{
+    encoded.clear();
+    dict.clear();
+    dict_decode.clear();
+    tree.clear();
+    entries = 0;
+
     ifstream infile(fn);
     string buf;
     while (infile >> buf)
@@ -37,7 +74,7 @@ void encode(char fn[])
         // cout << buf << endl;
         if (dict.find(buf) == dict.end())
         {
-            dict.insert({buf, entries});            
+            dict.insert({buf, entries});
             dict_decode.insert({entries, buf});
             tree.insert(buf, entries);
             entries++;
@@ -45,7 +82,31 @@ void encode(char fn[])
         encoded.push_back(dict[buf]);
     }
 
-    cout << "Encoding completed. Total: " << encoded.size() << " entries. Encoded: " << dict.size() << " entries." << endl;
+    infile.close();
+    cout << "Encoding completed. Input: " << encoded.size() << " entries. Encoded: " << dict.size() << " entries." << endl;
+}
+
+void load()
+{
+    encoded.clear();
+    dict.clear();
+    dict_decode.clear();
+    tree.clear();
+    entries = 0;
+
+    vectorRead(encoded, "../data/encoded.bin");
+
+    ifstream indict("../data/dict.txt");
+    string key;
+    int value;
+    while (indict >> key >> value)
+    {
+        // cout << key << value<<endl;
+        dict.insert({key, value});
+        dict_decode.insert({value, key});
+        tree.insert(key, value);
+    }
+    indict.close();
 }
 
 void save()
@@ -58,24 +119,22 @@ void save()
     ofstream outdict("../data/dict.txt");
     for (const auto &[key, value] : dict)
     {
-        outdict << value << ":" << key << '\n';
+        outdict << key << ' ' << value << '\n';
     }
     outdict.close();
 
     cout << "Encoded dictionary saved." << endl;
 }
 
-bool query()
+bool find(string key)
 {
-    string data;
-    cin >> data;
-    if (dict.find(data) == dict.end())
+    if (dict.find(key) == dict.end())
     {
-        cout << "Data not found." << endl;
+        cout << "Key not found." << endl;
         return false;
     }
-    int code = dict[data];
-    cout << "Data at column location(s): ";
+    int code = dict[key];
+    cout << "@ ";
     for (size_t i = 0; i < encoded.size(); i++)
     {
         if (code == encoded[i])
@@ -87,25 +146,32 @@ bool query()
     return true;
 }
 
+bool query()
+{
+    string key;
+    cin >> key;
+    return find(key);
+}
+
 void prefixQuery()
 {
     string data;
     cin >> data;
     vector<int> result;
-    tree.prefix_search(data,&result);
-    for(const auto r: result){
-        cout << r << ":" << dict_decode[r]<< endl;
+    tree.prefix_search(data, result);
+    for (const auto r : result)
+    {
+        cout << r << ":" << dict_decode[r] << " ";
+        find(dict_decode[r]);
     }
 }
 
 int main(int argc, char const *argv[])
 {
-    tree = Trie();
-
     char *buf;
     char opt = 0;
 
-    puts("===MENU===\n0. Exit\n1. Encode\n2. Save\n3. Query\n4. Prefix Query");
+    puts("===MENU===\n0. Exit\n1. Encode\n2. Save\n3. Load\n4. Query\n5. Prefix Query");
     puts("> ");
     while (cin >> opt)
     {
@@ -115,15 +181,18 @@ int main(int argc, char const *argv[])
             exit(EXIT_SUCCESS);
             break;
         case '1':
-            encode("../data/100k.txt");
+            encode(argv[1]);
             break;
         case '2':
             save();
             break;
         case '3':
-            query();
+            load();
             break;
         case '4':
+            query();
+            break;
+        case '5':
             prefixQuery();
             break;
         default:
