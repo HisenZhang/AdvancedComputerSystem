@@ -13,7 +13,7 @@
 
 using namespace std;
 
-#define CHUNK_SIZE 1000                     // read chunk size in lines
+#define CHUNK_SIZE 1000 // read chunk size in lines
 
 unordered_map<string, int> dict;
 unordered_map<int, string> dict_decode;
@@ -56,7 +56,7 @@ void encode(const char *fn, int nWorker)
     tree.clear();
     entries = 0;
 
-    ctpl::thread_pool pool(nWorker <= 0? thread::hardware_concurrency(): nWorker);
+    ctpl::thread_pool pool(nWorker <= 0 ? thread::hardware_concurrency() : nWorker);
 
     ifstream infile(fn);
     string line;
