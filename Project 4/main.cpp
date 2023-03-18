@@ -38,7 +38,7 @@ long getFileSize(char *fn)
 }
 
 template <typename T>
-int vectorRead(vector<T> &vec, char *fn)
+int vectorRead(vector<T> &vec, char fn[])
 {
     FILE *indata = fopen(fn, "rb");
     if (indata == NULL)
