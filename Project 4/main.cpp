@@ -3,12 +3,17 @@
 #include <vector>
 #include <unordered_map>
 #include <fstream>
+#include <thread>
+#include <mutex>
 #include <stdio.h>
-#include <sys/stat.h>
 #include <immintrin.h>
 #include "trie.h"
+#include "utils.h"
+#include "ctpl_stl.h"
 
 using namespace std;
+
+#define CHUNK_SIZE 1000                     // read chunk size in lines
 
 unordered_map<string, int> dict;
 unordered_map<int, string> dict_decode;
@@ -16,51 +21,34 @@ vector<int> encoded;
 int entries = 0;
 Trie tree;
 
-template <typename T>
-int vectorWrite(vector<T> &vec, char fn[])
-{
-    FILE *outdata = fopen(fn, "wb");
-    if (outdata == NULL)
-    {
-        perror("Error opening the file.\n");
-        return -1;
-    }
-    fwrite(&vec[0], sizeof(T), vec.size(), outdata);
-    fclose(outdata);
-    return 0;
-}
+mutex mtx;
 
-long getFileSize(char *fn)
+void encoder_worker(int id, vector<string> *chunk)
 {
-    struct stat stat_buf;
-    int rc = stat(fn, &stat_buf);
-    return rc == 0 ? stat_buf.st_size : -1;
-}
+    // cout << "Thread " << id << " running." <<endl;
 
-template <typename T>
-int vectorRead(vector<T> &vec, char fn[])
-{
-    FILE *indata = fopen(fn, "rb");
-    if (indata == NULL)
+    for (size_t i = 0; i < chunk->size(); i++)
     {
-        perror("Error opening the file.\n");
-        return -1;
-    }
-    int count = getFileSize(fn) / sizeof(T);
-    vec.reserve(count);
-    int buf = 0;
+        bool isFresh = (dict.find((*chunk)[i]) == dict.end());
 
-    for (size_t i = 0; i < count; i++)
-    {
-        fread(&buf, sizeof(T), 1, indata);
-        vec.emplace_back(buf);
+        mtx.lock();
+
+        if (isFresh)
+        {
+            dict.insert({(*chunk)[i], entries});
+            dict_decode.insert({entries, (*chunk)[i]});
+            tree.insert((*chunk)[i], entries);
+            entries++;
+        }
+        encoded.push_back(dict[(*chunk)[i]]);
+
+        mtx.unlock();
     }
 
-    fclose(indata);
-    return 0;
+    delete chunk;
 }
 
-void encode(const char *fn)
+void encode(const char *fn, int nWorker)
 {
     encoded.clear();
     dict.clear();
@@ -68,22 +56,31 @@ void encode(const char *fn)
     tree.clear();
     entries = 0;
 
+    ctpl::thread_pool pool(nWorker <= 0? thread::hardware_concurrency(): nWorker);
+
     ifstream infile(fn);
-    string buf;
-    while (infile >> buf)
+    string line;
+    vector<string> *chunk = new vector<string>;
+    (*chunk).reserve(CHUNK_SIZE);
+    while (getline(infile, line))
     {
-        // cout << buf << endl;
-        if (dict.find(buf) == dict.end())
+        (*chunk).push_back(line);
+        if ((*chunk).size() == CHUNK_SIZE)
         {
-            dict.insert({buf, entries});
-            dict_decode.insert({entries, buf});
-            tree.insert(buf, entries);
-            entries++;
+            pool.push(encoder_worker, chunk);
+            chunk = new vector<string>;
+            (*chunk).reserve(CHUNK_SIZE);
         }
-        encoded.push_back(dict[buf]);
+    }
+    infile.close();
+
+    if (!(*chunk).empty())
+    {
+        pool.push(encoder_worker, chunk);
     }
 
-    infile.close();
+    pool.stop(true);
+
     cout << "Encoding completed. Input: " << encoded.size() << " entries. Encoded: " << dict.size() << " entries." << endl;
 }
 
@@ -108,6 +105,8 @@ void load()
         tree.insert(key, value);
     }
     indict.close();
+
+    cout << "Loading completed. Encoded: " << encoded.size() << " entries. Total: " << dict.size() << " entries." << endl;
 }
 
 void save()
@@ -219,9 +218,9 @@ void prefixQuery()
 
 int main(int argc, char const *argv[])
 {
-    if (argc < 2)
+    if (argc < 3)
     {
-        cout << "Usage: " << argv[0] << " INFILE" << endl;
+        cout << "Usage: " << argv[0] << " INFILE N_WORKER" << endl;
         return EXIT_SUCCESS;
     }
 
@@ -244,7 +243,7 @@ int main(int argc, char const *argv[])
             exit(EXIT_SUCCESS);
             break;
         case '1':
-            encode(argv[1]);
+            encode(argv[1], atoi(argv[2]));
             break;
         case '2':
             save();
