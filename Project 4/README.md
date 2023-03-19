@@ -36,6 +36,8 @@ To use default hardware concurrency, set N_WORKER <= 0.
 
 WARNING: CRLF will break the program. Use LF for newline.
 
+WARNING: This program assumes input with ascii 'a'-'z'. Any other input will cause program to abort.
+
 The repo has `abc.txt`, `10k.txt` and `100k.txt` under `data/` for testing. 
 Use the raw column data file at the following address for your speed performance evaluation
 <https://drive.google.com/file/d/192_suEsMxGInZbob_oJJt-SlKqa4gehh>
