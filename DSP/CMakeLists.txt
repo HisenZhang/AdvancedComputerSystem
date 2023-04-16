@@ -17,5 +17,8 @@ else()
                 PRIVATE -mavx)
 endif()
 
-file(COPY        "${CMAKE_CURRENT_SOURCE_DIR}/data/test-audio.wav"
-     DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/data")
+file(COPY        "${CMAKE_CURRENT_SOURCE_DIR}/data/input/test-audio.wav"
+     DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/data/input")
+
+file(COPY        "${CMAKE_CURRENT_SOURCE_DIR}/data/input/thomas.wav"
+     DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/data/input")
