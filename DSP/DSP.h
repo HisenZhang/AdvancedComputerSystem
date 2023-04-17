@@ -15,6 +15,8 @@
 #include <numeric>
 #include <vector>
 
+#define TAU 6.2831855
+
 // The number of floats that fit into an AVX register.
 constexpr uint32_t AVX_FLOAT_COUNT = 8u;
 
@@ -153,25 +155,55 @@ void PlayBufferAsAudio(float* audioBuffer, uint32_t numSamples, uint32_t samplin
     free(wavBuffer);
 }
 
-#define TAU 6.2831855
-
-std::vector<float> GenerateSineWave(float frequency, float sampleRate, int numSamples)
+struct Signal
 {
-    const float radsPerSamp = TAU * frequency / sampleRate;
-	std::vector<float> result(numSamples);
+    std::vector<float> data;
+    uint32_t sampleRate;
+};
 
-    for (uint32_t i = 0; i < numSamples; i++)
-    {
-        result[i] = std::sin(radsPerSamp * (float) i);
-    }
-
-	return result;
-}
-
-void WriteSignal(const std::vector<float>& signal, const std::string& path) {
-	std::vector<std::vector<float>> channels = { signal };
+void WriteSignal(const Signal& signal, const std::string& path) {
+	std::vector<std::vector<float>> channels = { signal.data };
 
 	AudioFile<float> af;
 	af.setAudioBuffer(channels);
+    af.setSampleRate(signal.sampleRate);
 	af.save(path);
+}
+
+float SineGenerator(float pos)
+{
+  return sin(pos*TAU);
+}
+
+float SquareGenerator(float pos)
+{
+  return sin(pos*TAU) > 0.0f ? 1.0f : -1.0f;
+}
+
+float TriangleGenerator(float pos)
+{
+  return 1-fabs(pos-0.5)*4;
+}
+
+float SawGenerator(float pos)
+{
+  return pos*2-1;
+}
+
+float GenerateSignalAtSampleIndex(float(*generator)(float), uint32_t i, float frequency, float sampleRate)
+{
+    float pos = fmod(frequency * i / sampleRate, 1.0);
+    return generator(pos);
+}
+
+uint32_t GenerateSignal(float(*generator)(float), float frequency, uint32_t sampleRate, float duration, std::vector<float>& outSignal)
+{
+    uint32_t numSamples = sampleRate * duration;
+    outSignal.resize(numSamples);
+    for (uint32_t i = 0; i < numSamples; i++)
+    {
+        outSignal[i] = GenerateSignalAtSampleIndex(generator, i, frequency, sampleRate);
+    }
+
+    return sampleRate;
 }

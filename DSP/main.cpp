@@ -23,32 +23,32 @@
 // - Implement different filter types (echo, low pass, high pass, band pass, etc.)
 // - Close window button + esc to close?
 // - Run audio playback on a separate thread
+// - Source groups
 
-float sinFunc(float pos)
+struct PlotInput
 {
-  return sin(pos*TAU);
-}
+    PlotInput(Signal *signal)
+    {
+        this->signal = signal;
+        UpdateSampleStride();
+    }
 
-float squareFunc(float pos)
-{
-  return sin(pos*TAU) > 0.0f ? 1.0f : -1.0f;
-}
+    void UpdateSampleStride()
+    {
+        if (signal->data.size() > maxSamples)
+        {
+            sampleStride = signal->data.size() / maxSamples;
+        }
+        else { sampleStride = 1; }
 
-float sawFunc(float pos)
-{
-  return pos*2-1;
-}
+        bInputDirty = true;
+    }
 
-float triangleFunc(float pos)
-{
-  return 1-fabs(pos-0.5)*4;
-}
-
-float func(float(*ptr)(float), int i, float frequency, float sampleRate, float amplitude)
-{
-    float pos = fmod(frequency * i / sampleRate, 1.0);
-    return ptr(pos) * amplitude;
-}
+    Signal *signal = nullptr;
+    uint32_t maxSamples = 10000;
+    uint32_t sampleStride = 0;
+    bool bInputDirty = false;
+};
 
 int main(int, char**)
 {
@@ -96,14 +96,8 @@ int main(int, char**)
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init(glsl_version);
 
-	std::cout << "Loading signals...\n";
-
-	AudioFile<float> testSignal;
-	testSignal.load("data/input/test-audio.wav");
-	//thomasSignal.load("data/input/thomas.wav");
+    /*
 	std::vector<float> sine = GenerateSineWave(440.0f, 44100.0f, 44100);
-
-	std::cout << "Loading filters...\n";
 	std::vector<float> impulseResponse = { -1.0f, 0.0f, 1.0f };
 	std::vector<float> derivativeImpulseResponse = {
 		-0.03926588615294601,
@@ -162,36 +156,14 @@ int main(int, char**)
 	std::cout << "Applying filter (SIMD)...\n";
 	result.clear();
 	//applyFirFilterAVX(testEchoFilter, result);
-	//WriteSignal(result, "data/outSIMD.wav");
+    */
 
-    //PlayBufferAsAudio(sine.data(), sine.size(), 44100);
-
-    struct PlotInput
-    {
-        PlotInput(std::vector<float> *signal)
-        {
-            this->signal = signal;
-            UpdateSampleStride();
-        }
-
-        void UpdateSampleStride()
-        {
-            sampleStride = signal->size() / maxSamples;
-            bInputDirty = true;
-        }
-
-        std::vector<float> *signal = nullptr;
-        uint32_t sampleRate = 1.0f;
-        uint32_t maxSamples = 10000;
-        uint32_t sampleStride = 0;
-        bool bInputDirty = false;
-    };
-
-    std::vector<float> inputSignal;
+    Signal inputSignal, outputSignal;
     PlotInput mainPlotInput(&inputSignal);
+    std::string messageSaveSuccesful = "";
 
     bool bShowGenerators = false;
-    int generatorFrequency = 440;
+
 	while (!glfwWindowShouldClose(window))
     {
         glfwPollEvents();
@@ -216,45 +188,77 @@ int main(int, char**)
 
             // Input Waveform
             {
-                if (ImPlot::BeginPlot("Input Signal", ImVec2(), ImPlotFlags_NoLegend | ImPlotFlags_NoMouseText)) {
+                if (ImPlot::BeginPlot("Input Signal", ImVec2(-1, 400), ImPlotFlags_NoLegend | ImPlotFlags_NoMouseText)) {
                     ImPlotAxisFlags axisFlag = ImPlotAxisFlags_NoMenus | ImPlotAxisFlags_NoSideSwitch | ImPlotAxisFlags_NoHighlight;
                     if (mainPlotInput.bInputDirty)
                     {
                         axisFlag |= ImPlotAxisFlags_AutoFit;
                         mainPlotInput.bInputDirty = false;
                     }
-                    ImPlot::SetupAxes("Time (s)", NULL, axisFlag | ImPlotAxisFlags_PanStretch, axisFlag | ImPlotAxisFlags_Lock);
+
+                    ImPlot::SetupAxes("Time (s)", NULL, axisFlag | ImPlotAxisFlags_PanStretch | ImPlotAxisFlags_LockMin, axisFlag | ImPlotAxisFlags_Lock);
+                    ImPlot::SetupAxisLimits(ImAxis_X1, 0.0f, 10.0f);
                     ImPlot::SetupAxisLimits(ImAxis_Y1, -1.1f, 1.1f);
-
                     ImPlot::SetNextLineStyle(ImColor(1.0f, 0.0f, 0.0f, 1.0f), 2.0f);
-
                     ImPlot::PlotLineG("data", [](int i, void* data) -> ImPlotPoint {
-                            PlotInput* pi = (PlotInput*)data;
-                            float value = (*(pi->signal))[i * pi->sampleStride];
-                            float time = (float)i * pi->sampleStride / pi->sampleRate;
-                            return ImPlotPoint(time, value);
-                        }, &mainPlotInput, std::min(mainPlotInput.maxSamples, (uint32_t)mainPlotInput.signal->size()));
+                        PlotInput* pi = (PlotInput*)data;
+                        float value = pi->signal->data[i * pi->sampleStride];
+                        float time = (float)i * pi->sampleStride / pi->signal->sampleRate;
+
+                        return ImPlotPoint(time, value);
+                    }, &mainPlotInput, std::min(mainPlotInput.maxSamples, (uint32_t)mainPlotInput.signal->data.size()));
+
                     ImPlot::EndPlot();
                 }
 
                 if (ImGui::Button("Load File"))
                 {
-                    nfdchar_t* outPath = nullptr;
-                    nfdresult_t res = NFD_OpenDialog("wav", nullptr, &outPath);
+                    nfdchar_t* loadFilePath = nullptr;
+                    nfdresult_t res = NFD_OpenDialog("wav", nullptr, &loadFilePath);
                     if (res == NFD_OKAY)
                     {
-	                    AudioFile<float> testSignal;
-	                    testSignal.load(outPath);
-                        free(outPath);
-                        inputSignal = testSignal.samples[0];
+	                    AudioFile<float> af;
+	                    af.load(loadFilePath);
+                        free(loadFilePath);
+
+                        inputSignal.data = af.samples[0];
+                        inputSignal.sampleRate = af.getSampleRate();
                         mainPlotInput = PlotInput(&inputSignal);
-                        mainPlotInput.sampleRate = testSignal.getSampleRate();
                     }
                 }
                 if (ImGui::IsItemHovered()) ImGui::SetTooltip("Load an audio file (.wav only).");
                 ImGui::SameLine();
                 if (ImGui::Button("Generate")) bShowGenerators = true;
-                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Generate signal from preset waveform");
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Generate signal from preset waveform.");
+
+                if (ImGui::Button("Save"))
+                {
+                    nfdchar_t* saveFilePath = nullptr;
+                    nfdresult_t res = NFD_SaveDialog("wav", nullptr, &saveFilePath);
+                    if (res == NFD_OKAY)
+                    {
+	                    WriteSignal(inputSignal, saveFilePath);
+                        messageSaveSuccesful = "Saved";
+                        free(saveFilePath);
+                    }
+                    else if (res == NFD_ERROR)
+                    {
+                        messageSaveSuccesful = "Failed to save";
+                    }
+                    else
+                    {
+                        messageSaveSuccesful = "";
+                    }
+                }
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Save to disk (.wav only).");
+                ImGui::SameLine();
+                if (ImGui::Button("Play"))
+                {
+                    PlayBufferAsAudio(inputSignal.data.data(), inputSignal.data.size(), inputSignal.sampleRate); // TODO: should be output signal
+                }
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Playback audio signal.");
+
+                ImGui::Text(messageSaveSuccesful.c_str());
             }
 
             ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
@@ -265,58 +269,63 @@ int main(int, char**)
         if (bShowGenerators)
         {
             ImGui::Begin("Generators", &bShowGenerators);
+            if (ImGui::IsKeyPressed(ImGuiKey::ImGuiKey_Escape)) bShowGenerators = false;
 
-            static ImPlotSubplotFlags flags = ImPlotSubplotFlags_NoTitle | ImPlotSubplotFlags_NoLegend | ImPlotSubplotFlags_NoMenus | ImPlotSubplotFlags_NoResize;
+            static int generatorFrequency = 440;
+
+            static ImPlotSubplotFlags subPlotFlags = ImPlotSubplotFlags_NoTitle | ImPlotSubplotFlags_NoLegend | ImPlotSubplotFlags_NoMenus | ImPlotSubplotFlags_NoResize;
             static int rows = 2;
             static int cols = 2;
-            if (ImPlot::BeginSubplots("Presets", rows, cols, ImVec2(-1, 400), flags, nullptr, nullptr)) {
-                if (ImPlot::BeginPlot("Sine", ImVec2(), ImPlotFlags_CanvasOnly | ImPlotFlags_NoInputs)) {
+            if (ImPlot::BeginSubplots("Presets", rows, cols, ImVec2(-1, 400), subPlotFlags, nullptr, nullptr)) {
+                ImPlotFlags plotFlags = ImPlotFlags_NoInputs | ImPlotFlags_NoLegend | ImPlotFlags_NoMenus | ImPlotFlags_NoBoxSelect | ImPlotFlags_NoMouseText;
+
+                if (ImPlot::BeginPlot("Sine", ImVec2(), plotFlags)) {
                     ImPlot::SetupAxes(NULL, NULL, ImPlotAxisFlags_NoDecorations, ImPlotAxisFlags_NoDecorations);
                     ImPlot::SetupAxesLimits(0, 1000, -1.1f, 1.1f);
 
                     ImPlot::SetNextLineStyle(ImColor(1.0f, 0.0f, 0.0f, 1.0f), 2.0f);
                     ImPlot::PlotLineG("data", [](int i, void* data) -> ImPlotPoint {
                         int f = *(int*)data;
-                        float value = func(sinFunc, i, f / 100.0f, 1000.0f, 1.0f);
+                        float value = GenerateSignalAtSampleIndex(SineGenerator, i, f / 100.0f, 1000.0f);
                         return ImPlotPoint(i, value);
                         }, &generatorFrequency, 1000);
                     ImPlot::EndPlot();
                 }
 
-                if (ImPlot::BeginPlot("Square", ImVec2(), ImPlotFlags_CanvasOnly | ImPlotFlags_NoInputs)) {
+                if (ImPlot::BeginPlot("Square", ImVec2(), plotFlags)) {
                     ImPlot::SetupAxes(NULL, NULL, ImPlotAxisFlags_NoDecorations, ImPlotAxisFlags_NoDecorations);
                     ImPlot::SetupAxesLimits(0, 1000, -1.1f, 1.1f);
 
                     ImPlot::SetNextLineStyle(ImColor(1.0f, 0.0f, 0.0f, 1.0f), 2.0f);
                     ImPlot::PlotLineG("data", [](int i, void* data) -> ImPlotPoint {
                         int f = *(int*)data;
-                        float value = func(squareFunc, i, f / 100.0f, 1000.0f, 1.0f);
+                        float value = GenerateSignalAtSampleIndex(SquareGenerator, i, f / 100.0f, 1000.0f);
                         return ImPlotPoint(i, value);
                         }, &generatorFrequency, 1000);
                     ImPlot::EndPlot();
                 }
 
-                if (ImPlot::BeginPlot("Triangle", ImVec2(), ImPlotFlags_CanvasOnly | ImPlotFlags_NoInputs)) {
+                if (ImPlot::BeginPlot("Triangle", ImVec2(), plotFlags)) {
                     ImPlot::SetupAxes(NULL, NULL, ImPlotAxisFlags_NoDecorations, ImPlotAxisFlags_NoDecorations);
                     ImPlot::SetupAxesLimits(0, 1000, -1.1f, 1.1f);
 
                     ImPlot::SetNextLineStyle(ImColor(1.0f, 0.0f, 0.0f, 1.0f), 2.0f);
                     ImPlot::PlotLineG("data", [](int i, void* data) -> ImPlotPoint {
                         int f = *(int*)data;
-                        float value = func(triangleFunc, i, f / 100.0f, 1000.0f, 1.0f);
+                        float value = GenerateSignalAtSampleIndex(TriangleGenerator, i, f / 100.0f, 1000.0f);
                         return ImPlotPoint(i, value);
                         }, &generatorFrequency, 1000);
                     ImPlot::EndPlot();
                 }
 
-                if (ImPlot::BeginPlot("Saw", ImVec2(), ImPlotFlags_CanvasOnly | ImPlotFlags_NoInputs)) {
+                if (ImPlot::BeginPlot("Saw", ImVec2(), plotFlags)) {
                     ImPlot::SetupAxes(NULL, NULL, ImPlotAxisFlags_NoDecorations, ImPlotAxisFlags_NoDecorations);
                     ImPlot::SetupAxesLimits(0, 1000, -1.1f, 1.1f);
 
                     ImPlot::SetNextLineStyle(ImColor(1.0f, 0.0f, 0.0f, 1.0f), 2.0f);
                     ImPlot::PlotLineG("data", [](int i, void* data) -> ImPlotPoint {
                         int f = *(int*)data;
-                        float value = func(sawFunc, i, f / 100.0f, 1000.0f, 1.0f);
+                        float value = GenerateSignalAtSampleIndex(SawGenerator, i, f / 100.0f, 1000.0f);
                         return ImPlotPoint(i, value);
                         }, &generatorFrequency, 1000);
                     ImPlot::EndPlot();
@@ -325,7 +334,30 @@ int main(int, char**)
                 ImPlot::EndSubplots();
             }
 
-            ImGui::SliderInt("Frequency", &generatorFrequency, 50, 1000);
+            enum class WaveFormType { SINE, SQUARE, TRIANGLE, SAW, COUNT };
+            static int waveFormType = (int)WaveFormType::SINE;
+            const char* waveFormNames[(int)WaveFormType::COUNT] = { "Sine", "Square", "Triangle", "Saw" };
+            const char* waveFormName = (waveFormType >= 0 && waveFormType < (int)WaveFormType::COUNT) ? waveFormNames[waveFormType] : "Unknown";
+            ImGui::SliderInt("Wave Form", &waveFormType, 0, (int)(WaveFormType::COUNT) - 1, waveFormName);
+
+            static int generatorSampleRate = 100000;
+            static float generatorDuration = 1.0f;
+            ImGui::DragInt("Frequency", &generatorFrequency, 1.0f, 50, 1000);
+            ImGui::DragFloat("Duration (s)", &generatorDuration, 1.0f, 0.1f, 60.0f);
+
+            if (ImGui::Button("Generate"))
+            {
+                float(*generator)(float) = nullptr;
+
+                if (waveFormType == (int)WaveFormType::SINE) generator = SineGenerator;
+                else if (waveFormType == (int)WaveFormType::SQUARE) generator = SquareGenerator;
+                else if (waveFormType == (int)WaveFormType::TRIANGLE) generator = TriangleGenerator;
+                else if (waveFormType == (int)WaveFormType::SAW) generator = SawGenerator;
+
+                inputSignal.sampleRate = GenerateSignal(generator, generatorFrequency, generatorSampleRate, generatorDuration, inputSignal.data);
+                mainPlotInput = PlotInput(&inputSignal);
+            }
+
             ImGui::End();
         }
 
