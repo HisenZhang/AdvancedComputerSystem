@@ -9,7 +9,11 @@ set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT $
 
 add_executable(${PROJECT_NAME} main.cpp DSP.h ${CMAKE_CURRENT_SOURCE_DIR}/AudioFile/AudioFile.h)
 
-if (MSVC)
+if(WIN32)
+     target_link_libraries(${PROJECT_NAME} PRIVATE winmm.lib)
+endif()
+
+if(MSVC)
     target_compile_options(${PROJECT_NAME} 
                 PRIVATE /EHsc
                 PRIVATE /arch:AVX)

@@ -4,43 +4,25 @@
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 #define GL_SILENCE_DEPRECATION
-#include <GLFW/glfw3.h> // Will drag system OpenGL headers
-#include "AudioFile/AudioFile.h"
+#include "GLFW/glfw3.h" // Will drag system OpenGL headers
 
 #include <iostream>
 #include <vector>
 #include <string>
 
 // TODO:
+// - Create a useful interface
+//   - load file or choose a preset signal
+//   - add and layer effects to the audio
+//   - sliders for signal and effect parameters (frequency, sample rate, amplitude, phase, etc.)
+//   - display waveforms
+// - Preset waveforms to use (test files and also sine/square/sawtooth/triangle)
 // - Implement different filter types (echo, low pass, high pass, band pass, 
-// - Preset waveforms to use (test files and also saw/square/sine waves)
-// - Some kind of interface? imgui?
+// - Close window button + esc to close?
+// - Run audio playback on a separate thread
 
-#define TAU 6.2831855
+void InitializePresets() {
 
-std::vector<float> GenerateSineWave(float amplitude, float frequency, int numSamples) {
-	std::vector<float> result(numSamples);
-
-	for (int i = 0; i < numSamples; i++)
-	{
-		result[i] = amplitude * std::sin(frequency * i * TAU);
-	}
-
-	return result;
-}
-
-void WriteSignal(const std::vector<float>& signal, const std::string& path) {
-	std::vector<std::vector<float>> channels = { signal };
-
-	AudioFile<float> af;
-	af.setAudioBuffer(channels);
-	af.save(path);
-}
-
-static void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
-{
-    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
-        glfwSetWindowShouldClose(window, GLFW_TRUE);
 }
 
 int main(int, char**)
@@ -61,23 +43,17 @@ int main(int, char**)
     if (window == nullptr) return 1;
     glfwMakeContextCurrent(window);
     glfwSwapInterval(1); // Enable vsync
-    glfwSetKeyCallback(window, key_callback);
-   // [](GLFWwindow* window, int key, int scancode, int action, int mods) {
-   //     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) glfwSetWindowShouldClose(window, GL_TRUE);
-   // });
+    //glfwSetKeyCallback(window, [](GLFWwindow* window, int key, int scancode, int action, int mods) {
+    //    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) glfwSetWindowShouldClose(window, GL_TRUE);
+    //});
 
     // Setup Dear ImGui context
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO(); (void)io;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;         // Enable Docking
     io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;       // Enable Multi-Viewport / Platform Windows
-    //io.WantCaptureKeyboard = true;
-    //io.WantCaptureMouse = true;
-    //io.ConfigViewportsNoAutoMerge = true;
-    //io.ConfigViewportsNoTaskBarIcon = true;
 
     // Setup Dear ImGui style
     ImGui::StyleColorsDark();
@@ -99,7 +75,7 @@ int main(int, char**)
 	AudioFile<float> testSignal;
 	testSignal.load("data/input/test-audio.wav");
 	//thomasSignal.load("data/input/thomas.wav");
-	//std::vector<float> sine = GenerateSineWave(1.0f, 440.0f, 441000 * 5);
+	std::vector<float> sine = GenerateSineWave(440.0f, 44100.0f, 44100);
 
 	std::cout << "Loading filters...\n";
 	std::vector<float> impulseResponse = { -1.0f, 0.0f, 1.0f };
@@ -162,38 +138,28 @@ int main(int, char**)
 	//applyFirFilterAVX(testEchoFilter, result);
 	//WriteSignal(result, "data/outSIMD.wav");
 
-    while (!glfwWindowShouldClose(window))
+    //PlayBufferAsAudio(sine.data(), sine.size(), 44100);
+
+    bool bShouldStayOpen = true;
+    while (!glfwWindowShouldClose(window) && bShouldStayOpen)
     {
         glfwPollEvents();
+        //if (ImGui::IsKeyPressed(ImGuiKey_Escape)) break; // TODO: escape to exit
 
         // Start the Dear ImGui frame
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        // 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
         ImGui::ShowDemoWindow();
+        ImGui::Begin("Hello, world!", &bShouldStayOpen);
+        ImGui::Text("This is some useful text.");
+        //if (ImGui::Button("Button")) counter++;
+        //ImGui::SameLine();
+        //ImGui::Text("counter = %d", counter);
+        ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
+        ImGui::End();
 
-        //if (ImGui::IsKeyPressed(ImGuiKey_Escape)) break;
-
-        // 2. Show a simple window that we create ourselves. We use a Begin/End pair to create a named window.
-        {
-            static float f = 0.0f;
-            static int counter = 0;
-
-            ImGui::Begin("Hello, world!");
-            ImGui::Text("This is some useful text.");
-
-            if (ImGui::Button("Button"))                            // Buttons return true when clicked (most widgets return true when edited/activated)
-                counter++;
-            ImGui::SameLine();
-            ImGui::Text("counter = %d", counter);
-
-            ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
-            ImGui::End();
-        }
-
-        // Rendering
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
