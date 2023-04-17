@@ -5,6 +5,7 @@
 #include "imgui_impl_opengl3.h"
 #define GL_SILENCE_DEPRECATION
 #include "GLFW/glfw3.h" // Will drag system OpenGL headers
+#include "nfd.h"
 
 #include <iostream>
 #include <vector>
@@ -36,16 +37,16 @@ int main(int, char**)
     const char* glsl_version = "#version 130";
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
-    glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+    //glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
 
     // Create window with graphics context
-    GLFWwindow* window = glfwCreateWindow(1280, 720, "DSP Demo", nullptr, nullptr);
+    GLFWwindow* window = glfwCreateWindow(100, 100, "DSP Tool", nullptr, nullptr);
     if (window == nullptr) return 1;
     glfwMakeContextCurrent(window);
     glfwSwapInterval(1); // Enable vsync
-    //glfwSetKeyCallback(window, [](GLFWwindow* window, int key, int scancode, int action, int mods) {
-    //    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) glfwSetWindowShouldClose(window, GL_TRUE);
-    //});
+    glfwSetKeyCallback(window, [](GLFWwindow* window, int key, int scancode, int action, int mods) {
+        if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) glfwSetWindowShouldClose(window, GL_TRUE);
+    });
 
     // Setup Dear ImGui context
     IMGUI_CHECKVERSION();
@@ -152,11 +153,21 @@ int main(int, char**)
         ImGui::NewFrame();
 
         ImGui::ShowDemoWindow();
-        ImGui::Begin("Hello, world!", &bShouldStayOpen);
-        ImGui::Text("This is some useful text.");
-        //if (ImGui::Button("Button")) counter++;
+        ImGui::Begin("DSP Tool", &bShouldStayOpen);
+
         //ImGui::SameLine();
-        //ImGui::Text("counter = %d", counter);
+
+        if (ImGui::Button("Load File")) {
+
+            nfdchar_t *outPath = nullptr;
+            nfdresult_t res = NFD_OpenDialog("wav", nullptr, &outPath);
+            if (res == NFD_OKAY)
+            {
+                free(outPath);
+            }
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Load an audio file (.wav only).");
+
         ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
         ImGui::End();
 

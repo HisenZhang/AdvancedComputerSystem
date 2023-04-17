@@ -23,6 +23,7 @@ else()
 endif()
 
 add_subdirectory(imgui)
+add_subdirectory(nativefiledialog)
 
 file(COPY        "${CMAKE_CURRENT_SOURCE_DIR}/data/input/test-audio.wav"
      DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/data/input")
