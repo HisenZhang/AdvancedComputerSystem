@@ -17,6 +17,12 @@ target_sources(${PROJECT_NAME} PRIVATE
     backends/imgui_impl_opengl3.h
     backends/imgui_impl_opengl3.cpp
     backends/imgui_impl_opengl3_loader.h
+
+    implot/implot.h
+    implot/implot.cpp
+    implot/implot_demo.cpp
+    implot/implot_internal.h
+    implot/implot_items.cpp
 )
 
 find_package(OpenGL REQUIRED)

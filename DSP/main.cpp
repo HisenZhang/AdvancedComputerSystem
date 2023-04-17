@@ -1,6 +1,7 @@
 #include "DSP.h"
 
 #include "imgui.h"
+#include "implot/implot.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 #define GL_SILENCE_DEPRECATION
@@ -13,17 +14,44 @@
 
 // TODO:
 // - Create a useful interface
+//   - plot preset waveforms in table
 //   - load file or choose a preset signal
 //   - add and layer effects to the audio
 //   - sliders for signal and effect parameters (frequency, sample rate, amplitude, phase, etc.)
-//   - display waveforms
+//   - display result waveforms
 // - Preset waveforms to use (test files and also sine/square/sawtooth/triangle)
-// - Implement different filter types (echo, low pass, high pass, band pass, 
+// - Implement different filter types (echo, low pass, high pass, band pass, etc.)
 // - Close window button + esc to close?
 // - Run audio playback on a separate thread
 
 void InitializePresets() {
 
+}
+
+float sinFunc(float pos)
+{
+  return sin(pos*TAU);
+}
+
+float squareFunc(float pos)
+{
+  return sin(pos*TAU) > 0.0f ? 1.0f : -1.0f;
+}
+
+float sawFunc(float pos)
+{
+  return pos*2-1;
+}
+
+float triangleFunc(float pos)
+{
+  return 1-fabs(pos-0.5)*4;
+}
+
+float func(float(*ptr)(float), int i, float frequency, float sampleRate, float amplitude)
+{
+    float pos = fmod(frequency * i / sampleRate, 1.0);
+    return ptr(pos) * amplitude;
 }
 
 int main(int, char**)
@@ -40,7 +68,7 @@ int main(int, char**)
     //glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
 
     // Create window with graphics context
-    GLFWwindow* window = glfwCreateWindow(100, 100, "DSP Tool", nullptr, nullptr);
+    GLFWwindow* window = glfwCreateWindow(500, 500, "DSP Tool", nullptr, nullptr);
     if (window == nullptr) return 1;
     glfwMakeContextCurrent(window);
     glfwSwapInterval(1); // Enable vsync
@@ -51,9 +79,10 @@ int main(int, char**)
     // Setup Dear ImGui context
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
+    ImPlot::CreateContext();
     ImGuiIO& io = ImGui::GetIO(); (void)io;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
-    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;         // Enable Docking
+    //io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;         // Enable Docking
     io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;       // Enable Multi-Viewport / Platform Windows
 
     // Setup Dear ImGui style
@@ -141,21 +170,91 @@ int main(int, char**)
 
     //PlayBufferAsAudio(sine.data(), sine.size(), 44100);
 
-    bool bShouldStayOpen = true;
-    while (!glfwWindowShouldClose(window) && bShouldStayOpen)
+    while (!glfwWindowShouldClose(window))
     {
         glfwPollEvents();
-        //if (ImGui::IsKeyPressed(ImGuiKey_Escape)) break; // TODO: escape to exit
+
+        int windowWith, windowHeight, windowX, windowY;
+        glfwGetFramebufferSize(window, &windowWith, &windowHeight);
+        glfwGetWindowPos(window, &windowX, &windowY);
 
         // Start the Dear ImGui frame
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
+        ImPlot::ShowDemoWindow();
         ImGui::ShowDemoWindow();
-        ImGui::Begin("DSP Tool", &bShouldStayOpen);
 
-        //ImGui::SameLine();
+        ImGui::Begin("DSP Tool", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar);
+        ImGui::SetWindowSize(ImVec2(windowWith, windowHeight));
+        ImGui::SetWindowPos(ImVec2(windowX, windowY));
+
+        // Preset Rendering
+        {
+            static int frequency = 440;
+            float freq = frequency;
+            ImGui::SliderInt("Frequency", &frequency, 50, 1000);
+            static ImPlotSubplotFlags flags = ImPlotSubplotFlags_NoTitle | ImPlotSubplotFlags_NoLegend | ImPlotSubplotFlags_NoMenus | ImPlotSubplotFlags_NoResize;
+            static int rows = 2;
+            static int cols = 2;
+            if (ImPlot::BeginSubplots("Presets", rows, cols, ImVec2(-1,400), flags, nullptr, nullptr)) {
+                if (ImPlot::BeginPlot("Sine", ImVec2(), ImPlotFlags_CanvasOnly | ImPlotFlags_NoInputs)) {
+                    ImPlot::SetupAxes(NULL,NULL,ImPlotAxisFlags_NoDecorations,ImPlotAxisFlags_NoDecorations);
+                    ImPlot::SetupAxesLimits(0, 1000, -1.1f, 1.1f);
+
+                    ImPlot::SetNextLineStyle(ImColor(1.0f, 0.0f, 0.0f, 1.0f), 2.0f);
+                    ImPlot::PlotLineG("data", [](int i, void* data) -> ImPlotPoint {
+                        float f = *(float*)data;
+                        float value = func(sinFunc, i, f / 100.0f, 1000.0f, 1.0f);
+                        return ImPlotPoint(i, value);
+                        }, &freq, 1000);
+                    ImPlot::EndPlot();
+                }
+
+                if (ImPlot::BeginPlot("Square", ImVec2(), ImPlotFlags_CanvasOnly | ImPlotFlags_NoInputs)) {
+                    ImPlot::SetupAxes(NULL,NULL,ImPlotAxisFlags_NoDecorations,ImPlotAxisFlags_NoDecorations);
+                    ImPlot::SetupAxesLimits(0, 1000, -1.1f, 1.1f);
+
+                    ImPlot::SetNextLineStyle(ImColor(1.0f, 0.0f, 0.0f, 1.0f), 2.0f);
+                    ImPlot::PlotLineG("data", [](int i, void* data) -> ImPlotPoint {
+                        float f = *(float*)data;
+                        float value = func(squareFunc, i, f / 100.0f, 1000.0f, 1.0f);
+                        return ImPlotPoint(i, value);
+                        }, &freq, 1000);
+                    ImPlot::EndPlot();
+                }
+
+                if (ImPlot::BeginPlot("Triangle", ImVec2(), ImPlotFlags_CanvasOnly | ImPlotFlags_NoInputs)) {
+                    ImPlot::SetupAxes(NULL,NULL,ImPlotAxisFlags_NoDecorations,ImPlotAxisFlags_NoDecorations);
+                    ImPlot::SetupAxesLimits(0, 1000, -1.1f, 1.1f);
+
+                    ImPlot::SetNextLineStyle(ImColor(1.0f, 0.0f, 0.0f, 1.0f), 2.0f);
+                    ImPlot::PlotLineG("data", [](int i, void* data) -> ImPlotPoint {
+                        float f = *(float*)data;
+                        float value = func(triangleFunc, i, f / 100.0f, 1000.0f, 1.0f);
+                        return ImPlotPoint(i, value);
+                        }, &freq, 1000);
+                    ImPlot::EndPlot();
+                }
+
+                if (ImPlot::BeginPlot("Saw", ImVec2(), ImPlotFlags_CanvasOnly | ImPlotFlags_NoInputs)) {
+                    ImPlot::SetupAxes(NULL,NULL,ImPlotAxisFlags_NoDecorations,ImPlotAxisFlags_NoDecorations);
+                    ImPlot::SetupAxesLimits(0, 1000, -1.1f, 1.1f);
+
+                    ImPlot::SetNextLineStyle(ImColor(1.0f, 0.0f, 0.0f, 1.0f), 2.0f);
+                    ImPlot::PlotLineG("data", [](int i, void* data) -> ImPlotPoint {
+                        float f = *(float*)data;
+                        float value = func(sawFunc, i, f / 100.0f, 1000.0f, 1.0f);
+                        return ImPlotPoint(i, value);
+                        }, &freq, 1000);
+                    ImPlot::EndPlot();
+                }
+
+                ImPlot::EndSubplots();
+            }
+        }
+
 
         if (ImGui::Button("Load File")) {
 
@@ -172,6 +271,8 @@ int main(int, char**)
         ImGui::End();
 
         ImGui::Render();
+        glViewport(0, 0, windowWith, windowHeight);
+        glClear(GL_COLOR_BUFFER_BIT);
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
         if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
@@ -188,6 +289,7 @@ int main(int, char**)
     // Cleanup
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
+    ImPlot::DestroyContext();
     ImGui::DestroyContext();
 
     glfwDestroyWindow(window);
