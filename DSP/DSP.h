@@ -5,7 +5,15 @@
 #else
 #endif
 
+#include "imgui.h"
+#include "imgui_internal.h"
+#include "imgui_impl_glfw.h"
+#include "imgui_impl_opengl3.h"
+#include "implot/implot.h"
+#define GL_SILENCE_DEPRECATION
+#include "GLFW/glfw3.h" // Will drag system OpenGL headers
 #include "AudioFile/AudioFile.h"
+#include "nfd.h"
 
 #include <algorithm>
 #include <array>
@@ -155,6 +163,14 @@ void PlayBufferAsAudio(float* audioBuffer, uint32_t numSamples, uint32_t samplin
     free(wavBuffer);
 }
 
+void StopAudio()
+{
+#ifdef _WINDOWS
+    PlaySoundA(NULL, NULL, 0);
+#else
+#endif
+}
+
 struct Signal
 {
     std::vector<float> data;
@@ -207,3 +223,93 @@ uint32_t GenerateSignal(float(*generator)(float), float frequency, uint32_t samp
 
     return sampleRate;
 }
+
+struct AudioEffect
+{
+    virtual void Apply(const Signal& inSignal, Signal& outSignal, bool bUseAVX=true) const = 0;
+    virtual void DrawGUI() = 0;
+};
+
+struct EchoEffect : public AudioEffect
+{
+    void Apply(const Signal& inSignal, Signal& outSignal, bool bUseAVX=true) const override
+    {
+        uint32_t filterLength = inSignal.sampleRate * delay;
+	    std::vector<float> echoFilter(filterLength);
+	    for (int i = 0; i < filterLength; i++) {
+            echoFilter[i] = 0.0f;
+	    } echoFilter[0] = 1.0f; echoFilter[filterLength-1] = 1.0f;
+
+        FilterInput input(inSignal.data, echoFilter);
+        if (bUseAVX) applyFirFilterAVX(input, outSignal.data);
+        else applyFirFilter(input, outSignal.data);
+        outSignal.sampleRate = inSignal.sampleRate;
+    }
+
+    void DrawGUI() override
+    {
+        ImGui::Text("Echo");
+        ImGui::DragFloat("Delay", &delay, 0.1f, 0.0f, 5.0f);
+    }
+
+    float delay = 1.0f;
+};
+
+struct DerivativeEffect : public AudioEffect
+{
+    void Apply(const Signal& inSignal, Signal& outSignal, bool bUseAVX = true) const override
+    {
+        FilterInput input(inSignal.data, derivativeFilter);
+        if (bUseAVX) applyFirFilterAVX(input, outSignal.data);
+        else applyFirFilter(input, outSignal.data);
+        outSignal.sampleRate = inSignal.sampleRate;
+    }
+
+    void DrawGUI() override
+    {
+        ImGui::Text("Derivative");
+    }
+
+    std::vector<float> derivativeFilter = {
+        -0.03926588615294601,
+        -0.05553547436862413,
+        -0.07674634732792313,
+        -0.10359512127942656,
+        -0.13653763745381112,
+        -0.17563154711765214,
+        -0.22037129189056356,
+        -0.26953979617440665,
+        -0.32110731416014476,
+        -0.37220987669580885,
+        -0.41923575145442643,
+        -0.45803722114653117,
+        -0.48426719093924325,
+        -0.493817805141109  ,
+        -0.483315193354812  ,
+        -0.4506055551298345 ,
+        -0.39515794257351333,
+        -0.31831200150042305,
+        -0.22331589501120253,
+        -0.11512890376975546,
+        0.0                 ,
+        0.11512890376975546 ,
+        0.22331589501120253 ,
+        0.31831200150042305 ,
+        0.39515794257351333 ,
+        0.4506055551298345  ,
+        0.483315193354812   ,
+        0.493817805141109   ,
+        0.48426719093924325 ,
+        0.45803722114653117 ,
+        0.41923575145442643 ,
+        0.37220987669580885 ,
+        0.32110731416014476 ,
+        0.26953979617440665 ,
+        0.22037129189056356 ,
+        0.17563154711765214 ,
+        0.13653763745381112 ,
+        0.10359512127942656 ,
+        0.07674634732792313 ,
+        0.05553547436862413 ,
+    };
+};

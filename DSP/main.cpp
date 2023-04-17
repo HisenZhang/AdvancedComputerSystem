@@ -1,29 +1,19 @@
 #include "DSP.h"
 
-#include "imgui.h"
-#include "implot/implot.h"
-#include "imgui_impl_glfw.h"
-#include "imgui_impl_opengl3.h"
-#define GL_SILENCE_DEPRECATION
-#include "GLFW/glfw3.h" // Will drag system OpenGL headers
-#include "nfd.h"
-
 #include <iostream>
-#include <vector>
 #include <string>
 
 // TODO:
 // - Create a useful interface
-//   - plot preset waveforms in table
-//   - load file or choose a preset signal
-//   - add and layer effects to the audio
-//   - sliders for signal and effect parameters (frequency, sample rate, amplitude, phase, etc.)
 //   - display result waveforms
-// - Preset waveforms to use (test files and also sine/square/sawtooth/triangle)
-// - Implement different filter types (echo, low pass, high pass, band pass, etc.)
-// - Close window button + esc to close?
-// - Run audio playback on a separate thread
+//   - drag to reorder, button/right click to delete
+//   - loading icon while running
+// - Implement different filter types (reverb, low pass, high pass, band pass, etc.)
+// - Run dsp on a separate thread from the UI
 // - Source groups
+// - Build on Unix
+// - Flag for useAVX
+// - Benchmarking
 
 struct PlotInput
 {
@@ -64,7 +54,7 @@ int main(int, char**)
     //glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
 
     // Create window with graphics context
-    GLFWwindow* window = glfwCreateWindow(500, 500, "DSP Tool", nullptr, nullptr);
+    GLFWwindow* window = glfwCreateWindow(1200, 1080, "DSP Tool", nullptr, nullptr);
     if (window == nullptr) return 1;
     glfwMakeContextCurrent(window);
     glfwSwapInterval(1); // Enable vsync
@@ -96,73 +86,13 @@ int main(int, char**)
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init(glsl_version);
 
-    /*
-	std::vector<float> sine = GenerateSineWave(440.0f, 44100.0f, 44100);
-	std::vector<float> impulseResponse = { -1.0f, 0.0f, 1.0f };
-	std::vector<float> derivativeImpulseResponse = {
-		-0.03926588615294601,
-		-0.05553547436862413,
-		-0.07674634732792313,
-		-0.10359512127942656,
-		-0.13653763745381112,
-		-0.17563154711765214,
-		-0.22037129189056356,
-		-0.26953979617440665,
-		-0.32110731416014476,
-		-0.37220987669580885,
-		-0.41923575145442643,
-		-0.45803722114653117,
-		-0.48426719093924325,
-		-0.493817805141109  ,
-		-0.483315193354812  ,
-		-0.4506055551298345 ,
-		-0.39515794257351333,
-		-0.31831200150042305,
-		-0.22331589501120253,
-		-0.11512890376975546,
-		0.0                 ,
-		0.11512890376975546 ,
-		0.22331589501120253 ,
-		0.31831200150042305 ,
-		0.39515794257351333 ,
-		0.4506055551298345  ,
-		0.483315193354812   ,
-		0.493817805141109   ,
-		0.48426719093924325 ,
-		0.45803722114653117 ,
-		0.41923575145442643 ,
-		0.37220987669580885 ,
-		0.32110731416014476 ,
-		0.26953979617440665 ,
-		0.22037129189056356 ,
-		0.17563154711765214 ,
-		0.13653763745381112 ,
-		0.10359512127942656 ,
-		0.07674634732792313 ,
-		0.05553547436862413 ,
-	};
-	std::vector<float> echoImpulseResponse;
-	for (int i = 0; i < 44100; i++) {
-		echoImpulseResponse.push_back(0.0f);
-	} echoImpulseResponse[0] = 1.0f; echoImpulseResponse.push_back(1.0f);
-
-	FilterInput testEchoFilter(testSignal.samples[0], echoImpulseResponse);
-
-	std::cout << "Applying filter (non-SIMD)...\n";
-	std::vector<float> result;
-	//applyFirFilter(testEchoFilter, result);
-	//WriteSignal(result, "data/out.wav");
-
-	std::cout << "Applying filter (SIMD)...\n";
-	result.clear();
-	//applyFirFilterAVX(testEchoFilter, result);
-    */
-
     Signal inputSignal, outputSignal;
-    PlotInput mainPlotInput(&inputSignal);
-    std::string messageSaveSuccesful = "";
+    PlotInput inPlotInput(&inputSignal), outPlotInput(&outputSignal);
+    std::vector<std::unique_ptr<AudioEffect>> effects;
 
     bool bShowGenerators = false;
+    ImVec2 buttonSize(200, 70);
+    std::string messageSaveSuccesful = "";
 
 	while (!glfwWindowShouldClose(window))
     {
@@ -177,12 +107,12 @@ int main(int, char**)
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        ImPlot::ShowDemoWindow();
-        ImGui::ShowDemoWindow();
+        //ImPlot::ShowDemoWindow();
+        //ImGui::ShowDemoWindow();
 
         // Main Window
         {
-            ImGui::Begin("DSP Tool", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoDecoration);
+            ImGui::Begin("DSP Tool", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoDecoration & ~ImGuiWindowFlags_NoScrollbar);
             ImGui::SetWindowSize(ImVec2(windowWith, windowHeight));
             ImGui::SetWindowPos(ImVec2(windowX, windowY));
 
@@ -190,10 +120,10 @@ int main(int, char**)
             {
                 if (ImPlot::BeginPlot("Input Signal", ImVec2(-1, 400), ImPlotFlags_NoLegend | ImPlotFlags_NoMouseText)) {
                     ImPlotAxisFlags axisFlag = ImPlotAxisFlags_NoMenus | ImPlotAxisFlags_NoSideSwitch | ImPlotAxisFlags_NoHighlight;
-                    if (mainPlotInput.bInputDirty)
+                    if (inPlotInput.bInputDirty)
                     {
                         axisFlag |= ImPlotAxisFlags_AutoFit;
-                        mainPlotInput.bInputDirty = false;
+                        inPlotInput.bInputDirty = false;
                     }
 
                     ImPlot::SetupAxes("Time (s)", NULL, axisFlag | ImPlotAxisFlags_PanStretch | ImPlotAxisFlags_LockMin, axisFlag | ImPlotAxisFlags_Lock);
@@ -206,12 +136,12 @@ int main(int, char**)
                         float time = (float)i * pi->sampleStride / pi->signal->sampleRate;
 
                         return ImPlotPoint(time, value);
-                    }, &mainPlotInput, std::min(mainPlotInput.maxSamples, (uint32_t)mainPlotInput.signal->data.size()));
+                    }, &inPlotInput, std::min(inPlotInput.maxSamples, (uint32_t)inPlotInput.signal->data.size()));
 
                     ImPlot::EndPlot();
                 }
 
-                if (ImGui::Button("Load File"))
+                if (ImGui::Button("Load File", buttonSize))
                 {
                     nfdchar_t* loadFilePath = nullptr;
                     nfdresult_t res = NFD_OpenDialog("wav", nullptr, &loadFilePath);
@@ -223,21 +153,160 @@ int main(int, char**)
 
                         inputSignal.data = af.samples[0];
                         inputSignal.sampleRate = af.getSampleRate();
-                        mainPlotInput = PlotInput(&inputSignal);
+                        inPlotInput = PlotInput(&inputSignal);
                     }
                 }
                 if (ImGui::IsItemHovered()) ImGui::SetTooltip("Load an audio file (.wav only).");
                 ImGui::SameLine();
-                if (ImGui::Button("Generate")) bShowGenerators = true;
+                if (ImGui::Button("Generators", buttonSize)) bShowGenerators = true;
                 if (ImGui::IsItemHovered()) ImGui::SetTooltip("Generate signal from preset waveform.");
+            }
 
-                if (ImGui::Button("Save"))
+            // Effect List
+            {
+                ImGui::Text("Audio Effects");
+                ImGui::SameLine();
+                static bool bUseAVX = true;
+                ImGui::Checkbox("Use AVX", &bUseAVX);
+
+                ImGui::Separator();
+
+                for (auto& effect : effects)
+                {
+                    effect->DrawGUI();
+                    ImGui::Separator();
+                }
+
+                const char* effectNames[] = { "Echo", "Derivative" };
+                static int effectIndex = 0;
+                ImGui::Combo(" ", &effectIndex, effectNames, IM_ARRAYSIZE(effectNames));
+                ImGui::SameLine();
+                if (ImGui::Button("Add Effect"))
+                {
+                    if (effectIndex == 0) effects.emplace_back(new EchoEffect);
+                    else if (effectIndex == 1) effects.emplace_back(new DerivativeEffect);
+                }
+
+                if (ImGui::Button("Apply", buttonSize))
+                {
+                    if (inputSignal.data.size() > 0)
+                    {
+                        if (effects.size() == 0)
+                        {
+                            outputSignal = inputSignal;
+                        }
+                        else
+                        {
+                            Signal temp = inputSignal;
+                            for (auto& effect : effects)
+                            {
+                                effect->Apply(temp, outputSignal, bUseAVX);
+                                temp = outputSignal;
+                            }
+                        }
+
+                        outPlotInput = PlotInput(&outputSignal);
+                    }
+                }
+
+                //static const char* item_names[] = { "Item One", "Item Two", "Item Three", "Item Four", "Item Five" };
+                //for (int n = 0; n < IM_ARRAYSIZE(item_names); n++)
+                //{
+                //    const char* item = item_names[n];
+                //    ImGui::Selectable(item);
+
+                //    ImGui::DragInt()
+
+                //    if (ImGui::IsItemActive() && !ImGui::IsItemHovered())
+                //    {
+                //        int n_next = n + (ImGui::GetMouseDragDelta(0).y < 0.f ? -1 : 1);
+                //        if (n_next >= 0 && n_next < IM_ARRAYSIZE(item_names))
+                //        {
+                //            item_names[n] = item_names[n_next];
+                //            item_names[n_next] = item;
+                //            ImGui::ResetMouseDragDelta();
+                //        }
+                //    }
+                //}
+
+                //auto pos = ImGui::GetCursorPos();
+                //static int selected = false;
+                //for (int n = 0; n < 10; n++)
+                //{
+                //    ImGui::PushID(n);
+                //
+                //    char buf[32];
+                //    sprintf(buf, "##Object %d", n);
+                //
+                //    ImGui::SetCursorPos(ImVec2(pos.x, pos.y));
+                //    if (ImGui::Selectable(buf, n == selected, 0, ImVec2(100, 50))) {
+                //        selected = n;
+                //    }
+                //    ImGui::SetItemAllowOverlap();
+                //
+                //    ImGui::SetCursorPos(ImVec2(pos.x, pos.y));
+                //    ImGui::Text("foo");
+                //
+                //    ImGui::SetCursorPos(ImVec2(pos.x + 30, pos.y+5));
+                //    if(ImGui::Button("do thing", ImVec2(70, 30)))
+                //    {
+                //        ImGui::OpenPopup("Setup?");
+                //        selected = n;
+                //        printf("SETUP CLICKED %d\n", n);
+                //    }
+                //
+                //    if (ImGui::BeginPopupModal("Setup?", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+                //    {
+                //        ImGuiContext& g = *GImGui;
+                //        ImGuiWindow* window = g.CurrentWindow;
+                //        ImVec2 pos_before = window->DC.CursorPos;
+                //
+                //        ImGui::Text("Setup Popup");
+                //        if (ImGui::Button("OK", ImVec2(120, 0))) { printf("OK PRESSED!\n"); ImGui::CloseCurrentPopup(); }
+                //        ImGui::EndPopup();
+                //    }
+                //
+                //    ImGui::SetCursorPos(ImVec2(pos.x, pos.y+20));
+                //    ImGui::Text("bar");
+                //
+                //    pos.y += 55;
+                //
+                //    ImGui::PopID();
+                //}
+            }
+
+            // Output Waveform
+            {
+                if (ImPlot::BeginPlot("Output Signal", ImVec2(-1, 400), ImPlotFlags_NoLegend | ImPlotFlags_NoMouseText)) {
+                    ImPlotAxisFlags axisFlag = ImPlotAxisFlags_NoMenus | ImPlotAxisFlags_NoSideSwitch | ImPlotAxisFlags_NoHighlight;
+                    if (outPlotInput.bInputDirty)
+                    {
+                        axisFlag |= ImPlotAxisFlags_AutoFit;
+                        outPlotInput.bInputDirty = false;
+                    }
+
+                    ImPlot::SetupAxes("Time (s)", NULL, axisFlag | ImPlotAxisFlags_PanStretch | ImPlotAxisFlags_LockMin, axisFlag | ImPlotAxisFlags_Lock);
+                    ImPlot::SetupAxisLimits(ImAxis_X1, 0.0f, 10.0f);
+                    ImPlot::SetupAxisLimits(ImAxis_Y1, -1.1f, 1.1f);
+                    ImPlot::SetNextLineStyle(ImColor(1.0f, 0.0f, 0.0f, 1.0f), 2.0f);
+                    ImPlot::PlotLineG("data", [](int i, void* data) -> ImPlotPoint {
+                        PlotInput* pi = (PlotInput*)data;
+                        float value = pi->signal->data[i * pi->sampleStride];
+                        float time = (float)i * pi->sampleStride / pi->signal->sampleRate;
+
+                        return ImPlotPoint(time, value);
+                    }, &outPlotInput, std::min(outPlotInput.maxSamples, (uint32_t)outPlotInput.signal->data.size()));
+
+                    ImPlot::EndPlot();
+                }
+
+                if (ImGui::Button("Save", buttonSize))
                 {
                     nfdchar_t* saveFilePath = nullptr;
                     nfdresult_t res = NFD_SaveDialog("wav", nullptr, &saveFilePath);
                     if (res == NFD_OKAY)
                     {
-	                    WriteSignal(inputSignal, saveFilePath);
+	                    WriteSignal(outputSignal, saveFilePath);
                         messageSaveSuccesful = "Saved";
                         free(saveFilePath);
                     }
@@ -252,11 +321,24 @@ int main(int, char**)
                 }
                 if (ImGui::IsItemHovered()) ImGui::SetTooltip("Save to disk (.wav only).");
                 ImGui::SameLine();
-                if (ImGui::Button("Play"))
+                if (ImGui::Button("Play", buttonSize))
                 {
-                    PlayBufferAsAudio(inputSignal.data.data(), inputSignal.data.size(), inputSignal.sampleRate); // TODO: should be output signal
+                    PlayBufferAsAudio(outputSignal.data.data(), outputSignal.data.size(), outputSignal.sampleRate);
                 }
                 if (ImGui::IsItemHovered()) ImGui::SetTooltip("Playback audio signal.");
+                ImGui::SameLine();
+                if (ImGui::Button("Stop", buttonSize))
+                {
+                    StopAudio();
+                }
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Stop audio playback.");
+                ImGui::SameLine();
+                if (ImGui::Button("Clear", buttonSize))
+                {
+                    outputSignal.data.clear();
+                    outPlotInput = PlotInput(&outputSignal);
+                }
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Stop audio playback.");
 
                 ImGui::Text(messageSaveSuccesful.c_str());
             }
@@ -345,7 +427,7 @@ int main(int, char**)
             ImGui::DragInt("Frequency", &generatorFrequency, 1.0f, 50, 1000);
             ImGui::DragFloat("Duration (s)", &generatorDuration, 1.0f, 0.1f, 60.0f);
 
-            if (ImGui::Button("Generate"))
+            if (ImGui::Button("Generate", buttonSize))
             {
                 float(*generator)(float) = nullptr;
 
@@ -355,7 +437,7 @@ int main(int, char**)
                 else if (waveFormType == (int)WaveFormType::SAW) generator = SawGenerator;
 
                 inputSignal.sampleRate = GenerateSignal(generator, generatorFrequency, generatorSampleRate, generatorDuration, inputSignal.data);
-                mainPlotInput = PlotInput(&inputSignal);
+                inPlotInput = PlotInput(&inputSignal);
             }
 
             ImGui::End();
