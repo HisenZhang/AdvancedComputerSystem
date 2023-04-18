@@ -15,18 +15,28 @@
 #include "AudioFile/AudioFile.h"
 #include "nfd.h"
 
+#include "pulse/pulseaudio.h"
+#include "pulse/simple.h"
+#include "pulse/error.h"
+
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <immintrin.h>
 #include <iostream>
 #include <memory>
 #include <numeric>
+#include <thread>
 #include <vector>
 
 #define TAU 6.2831855
 
 // The number of floats that fit into an AVX register.
 constexpr uint32_t AVX_FLOAT_COUNT = 8u;
+
+#ifndef _WINDOWS
+std::atomic<bool> bPlaybackAudioAsync;
+#endif
 
 float highestMultipleOfNIn(float in, float N) {
     return static_cast<long long>(in / N);
@@ -136,14 +146,57 @@ struct WaveHeader // From https://stackoverflow.com/a/70991482/14865787
     };
 };
 
+#ifndef _WINDOWS
+void PlayBufferAsync(int16_t* audioBuffer, uint32_t numSamples, uint32_t samplingFrequency)
+{
+    pa_simple *s;
+    pa_sample_spec ss;
+    
+    ss.format = PA_SAMPLE_S16LE;
+    ss.channels = 1;
+    ss.rate = samplingFrequency;
+    
+    s = pa_simple_new(NULL,           // Use the default server.
+                  "Fooapp",           // Our application's name.
+                  PA_STREAM_PLAYBACK,
+                  NULL,               // Use the default device.
+                  "Music",            // Description of our stream.
+                  &ss,                // Our sample format.
+                  NULL,               // Use default channel map
+                  NULL,               // Use default buffering attributes.
+                  NULL                // Ignore error code.
+                  );
+
+    for (int i = 0; i < numSamples; i += 512)
+    {
+        uint16_t buffer[512];
+        ssize_t size = 512 * sizeof(int16_t);
+        memcpy(buffer, audioBuffer + i, size);
+        pa_simple_write(s, buffer, size, NULL);
+
+        if (bPlaybackAudioAsync.load() == false) break;
+    }
+
+    bPlaybackAudioAsync.store(false);
+
+    pa_simple_free(s);
+    free(audioBuffer);
+}
+#endif
+
 void PlayBufferAsAudio(float* audioBuffer, uint32_t numSamples, uint32_t samplingFrequency)
 {
+#ifdef _WINDOWS
     // WinApi PlaySound requires the buffer in memory to have the wav file header
     char *wavBuffer = new char[sizeof(WaveHeader) + sizeof(int16_t)*numSamples];
     WaveHeader header(/*samplingFrequency=*/samplingFrequency, /*bitDepth=*/16, /*numChannels=*/1, numSamples);
     memcpy(wavBuffer, &header, sizeof(WaveHeader));
-    
     int16_t *data = (int16_t*)(wavBuffer + sizeof(WaveHeader));
+#else
+    int16_t *data = new int16_t[sizeof(int16_t)*numSamples];
+#endif
+
+    // Repackage audioBuffer as 16 bit ints
     constexpr float max16BitValue = 32768.0f;
     for (int i = 0; i < numSamples; ++i)
     {
@@ -153,14 +206,16 @@ void PlayBufferAsAudio(float* audioBuffer, uint32_t numSamples, uint32_t samplin
         data[i] = int16_t(pcm);
     }
 
-#ifdef _WINDOWS
+#if _WINDOWS
     //PlaySound((LPCSTR)filepath.c_str(), NULL, SND_FILENAME);
     //PlaySound(MAKEINTRESOURCE((char*)wavBuffer), NULL, SND_FILENAME);
     PlaySound(wavBuffer, NULL, SND_MEMORY | SND_ASYNC);
-#else
-    std::system((std::string("afplay ") + filepath).c_str());
-#endif
     free(wavBuffer);
+#else
+    bPlaybackAudioAsync.store(true);
+    std::thread soundThread(PlayBufferAsync, data, numSamples, samplingFrequency);
+    soundThread.detach();
+#endif
 }
 
 void StopAudio()
@@ -168,6 +223,7 @@ void StopAudio()
 #ifdef _WINDOWS
     PlaySoundA(NULL, NULL, 0);
 #else
+    bPlaybackAudioAsync.store(false);
 #endif
 }
 

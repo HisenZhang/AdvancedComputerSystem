@@ -9,7 +9,7 @@ target_sources(${PROJECT_NAME} PRIVATE
 if(UNIX)
     target_sources(${PROJECT_NAME} PRIVATE
         src/nfd_gtk.c
-        src/nfd_zenity.c
+        #src/nfd_zenity.c
     )
 
     find_package(GTK2 2.6 REQUIRED gtk)

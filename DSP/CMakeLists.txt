@@ -7,10 +7,21 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/")
 set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT ${PROJECT_NAME})
 
+
 add_executable(${PROJECT_NAME} main.cpp DSP.h ${CMAKE_CURRENT_SOURCE_DIR}/AudioFile/AudioFile.h)
 
 if(WIN32)
      target_link_libraries(${PROJECT_NAME} PRIVATE winmm.lib)
+elseif(UNIX)
+     find_package(PulseAudio)
+     find_package(Threads REQUIRED)
+     target_include_directories(${PROJECT_NAME} PRIVATE ${PULSEAUDIO_INCLUDE_DIR})
+     target_link_libraries(${PROJECT_NAME} PRIVATE 
+          ${PULSEAUDIO_LIBRARY} 
+          ${PULSEAUDIO_SIMPLE_LIBRARY} 
+          ${PULSEAUDIO_MAINLOOP_LIBRARY} 
+          ${CMAKE_DL_LIBS} 
+          Threads::Threads)
 endif()
 
 if(MSVC)
