@@ -7,8 +7,9 @@
 // - Implement different filter types
 // - Benchmarking
 // - Center convolution
-// - Fix issue with thomas file
-// - Undefined behavior in AVX code ?
+// - Normalize post convolution?
+// - Test on linux again
+// - Deploy new release
 
 struct PlotInput
 {
@@ -476,6 +477,8 @@ int main(int, char**)
 
             ImGui::End();
         }
+
+        AudioPlaybackCleanup::CleanupFrame(io.DeltaTime);
 
         ImGui::Render();
         glViewport(0, 0, windowWith, windowHeight);

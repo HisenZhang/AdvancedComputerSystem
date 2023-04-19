@@ -257,6 +257,54 @@ struct WaveHeader // From https://stackoverflow.com/a/70991482/14865787
 };
 #endif
 
+#include <list>
+
+struct AudioPlaybackCleanup
+{
+private:
+    struct _AudioPlayback
+    {
+        void* data;
+        float duration;
+    };
+
+    inline static std::list<_AudioPlayback> cleanupList;
+public:
+    static void PushAudio(void* data, float duration)
+    {
+        cleanupList.push_back({ data, duration });
+    }
+
+    static void CleanupFrame(float dt)
+    {
+        std::cout << "Frame\n";
+
+        for (auto it = cleanupList.begin(); it != cleanupList.end();)
+        {
+            std::cout << it->duration << "\n";
+
+            it->duration -= dt;
+            if (it->duration < 0.0f)
+            {
+                std::cout << "freed!\n";
+                free(it->data);
+                auto prevIt = it;
+                it++;
+                cleanupList.erase(prevIt);
+            }
+            else it++;
+        }
+    }
+
+    static void Clear()
+    {
+        for (_AudioPlayback& c : cleanupList)
+        {
+            free(c.data);
+        } cleanupList.clear();
+    }
+};
+
 #ifndef _WINDOWS
 void PlayBufferAsync(int16_t* audioBuffer, uint32_t numSamples, uint32_t samplingFrequency)
 {
@@ -323,11 +371,12 @@ void PlaySignal(const Signal& signal)
     //PlaySound((LPCSTR)filepath.c_str(), NULL, SND_FILENAME);
     //PlaySound(MAKEINTRESOURCE((char*)wavBuffer), NULL, SND_FILENAME);
     PlaySound(wavBuffer, NULL, SND_MEMORY | SND_ASYNC);
-    //free(wavBuffer);
+    AudioPlaybackCleanup::PushAudio(wavBuffer, numSamples / signal.sampleRate + 1);
 #else
     bPlaybackAudioAsync.store(true);
     std::thread soundThread(PlayBufferAsync, data, numSamples, signal.sampleRate);
     soundThread.detach();
+    AudioPlaybackCleanup::PushAudio(data, numSamples / signal.sampleRate + 1);
 #endif
 }
 
