@@ -5,9 +5,8 @@
 
 // TODO:
 // - Implement different filter types (reverb, low pass, high pass, band pass, etc.)
-// - Run dsp on a separate thread from the UI
-// - Source groups
 // - Benchmarking
+// - Center convolution
 
 struct PlotInput
 {
@@ -200,6 +199,25 @@ int main(int, char**)
                 ImGui::SameLine();
                 if (ImGui::Button("Generators", buttonSize)) bShowGenerators = true;
                 if (ImGui::IsItemHovered()) ImGui::SetTooltip("Generate signal from preset waveform.");
+                ImGui::SameLine();
+                if (ImGui::Button("Play##Input", buttonSize))
+                {
+                    PlaySignal(inputSignal);
+                }
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Playback audio signal.");
+                ImGui::SameLine();
+                if (ImGui::Button("Stop##Input", buttonSize))
+                {
+                    StopAudio();
+                }
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Stop audio playback.");
+                ImGui::SameLine();
+                if (ImGui::Button("Clear##Input", buttonSize))
+                {
+                    inputSignal.data.clear();
+                    inPlotInput = PlotInput(&inputSignal);
+                }
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Clear output signal.");
             }
 
             ImGui::Separator();
@@ -334,24 +352,24 @@ int main(int, char**)
                 }
                 if (ImGui::IsItemHovered()) ImGui::SetTooltip("Save to disk (.wav only).");
                 ImGui::SameLine();
-                if (ImGui::Button("Play", buttonSize))
+                if (ImGui::Button("Play##Output", buttonSize))
                 {
-                    PlayBufferAsAudio(outputSignal.data.data(), outputSignal.data.size(), outputSignal.sampleRate);
+                    PlaySignal(outputSignal);
                 }
                 if (ImGui::IsItemHovered()) ImGui::SetTooltip("Playback audio signal.");
                 ImGui::SameLine();
-                if (ImGui::Button("Stop", buttonSize))
+                if (ImGui::Button("Stop##Output", buttonSize))
                 {
                     StopAudio();
                 }
                 if (ImGui::IsItemHovered()) ImGui::SetTooltip("Stop audio playback.");
                 ImGui::SameLine();
-                if (ImGui::Button("Clear", buttonSize))
+                if (ImGui::Button("Clear##Output", buttonSize))
                 {
                     outputSignal.data.clear();
                     outPlotInput = PlotInput(&outputSignal);
                 }
-                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Stop audio playback.");
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Clear output signal.");
 
                 ImGui::Text(messageSaveSuccesful.c_str());
             }

@@ -1,1 +1,0 @@
-```sudo apt install gtk2.0 libglfw3 libglfw3-dev```
