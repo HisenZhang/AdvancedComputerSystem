@@ -4,6 +4,10 @@ Hisen Zhang and Wyatt Marvil
 
 This project contains several DSP functions that take advantage of SIMD to speed up computing.
 
+Main Window             |  Waveform Generators
+:-------------------------:|:-------------------------:
+![MainWindow](https://github.com/HisenZhang/AdvancedComputerSystem/blob/main/Final/images/MainWindow.png)  |  ![GeneratorWindow](https://github.com/HisenZhang/AdvancedComputerSystem/blob/main/Final/images/GeneratorWindow.png)
+
 ### Features
 - Load WAV file
 - Generate simple waveforms
