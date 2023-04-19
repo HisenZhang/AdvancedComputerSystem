@@ -218,6 +218,10 @@ int main(int, char**)
 
                 if (toRemove > -1) effects.erase(effects.begin() + toRemove);
 
+                const float width = ImGui::GetWindowWidth();
+                const float combo_width = width * 0.12f;
+                ImGui::SetNextItemWidth(combo_width);
+
                 const char* effectNames[] = { "Echo", "Derivative" };
                 static int effectIndex = 0;
                 ImGui::Combo("##effectNames", &effectIndex, effectNames, IM_ARRAYSIZE(effectNames));
