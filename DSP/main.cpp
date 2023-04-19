@@ -4,15 +4,9 @@
 #include <string>
 
 // TODO:
-// - Create a useful interface
-//   - display result waveforms
-//   - drag to reorder, button/right click to delete
-//   - loading icon while running
 // - Implement different filter types (reverb, low pass, high pass, band pass, etc.)
 // - Run dsp on a separate thread from the UI
 // - Source groups
-// - Build on Unix
-// - Flag for useAVX
 // - Benchmarking
 
 struct PlotInput
@@ -70,12 +64,57 @@ int main(int, char**)
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
     //io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;         // Enable Docking
     io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;       // Enable Multi-Viewport / Platform Windows
+    io.Fonts->AddFontFromFileTTF("data/fonts/Ruda/Ruda-Bold.ttf", 16);
 
     // Setup Dear ImGui style
     ImGui::StyleColorsDark();
-
-    // When viewports are enabled we tweak WindowRounding/WindowBg so platform windows can look identical to regular ones.
     ImGuiStyle& style = ImGui::GetStyle();
+    {
+        style.WindowPadding = ImVec2(15, 15);
+        style.WindowRounding = 5.0f;
+        style.FramePadding = ImVec2(5, 5);
+        style.FrameRounding = 4.0f;
+        style.ItemSpacing = ImVec2(12, 8);
+        style.ItemInnerSpacing = ImVec2(8, 6);
+        style.IndentSpacing = 25.0f;
+        style.GrabMinSize = 5.0f;
+        style.GrabRounding = 3.0f;
+        style.Colors[ImGuiCol_Text] = ImVec4(0.80f, 0.80f, 0.83f, 1.00f);
+        style.Colors[ImGuiCol_TextDisabled] = ImVec4(0.24f, 0.23f, 0.29f, 1.00f);
+        style.Colors[ImGuiCol_WindowBg] = ImVec4(0.06f, 0.05f, 0.07f, 1.00f);
+        style.Colors[ImGuiCol_PopupBg] = ImVec4(0.07f, 0.07f, 0.09f, 1.00f);
+        style.Colors[ImGuiCol_Border] = ImVec4(0.80f, 0.80f, 0.83f, 0.88f);
+        style.Colors[ImGuiCol_BorderShadow] = ImVec4(0.92f, 0.91f, 0.88f, 0.00f);
+        style.Colors[ImGuiCol_FrameBg] = ImVec4(0.10f, 0.09f, 0.12f, 1.00f);
+        style.Colors[ImGuiCol_FrameBgHovered] = ImVec4(0.24f, 0.23f, 0.29f, 1.00f);
+        style.Colors[ImGuiCol_FrameBgActive] = ImVec4(0.56f, 0.56f, 0.58f, 1.00f);
+        style.Colors[ImGuiCol_TitleBg] = ImVec4(0.10f, 0.09f, 0.12f, 1.00f);
+        style.Colors[ImGuiCol_TitleBgCollapsed] = ImVec4(1.00f, 0.98f, 0.95f, 0.75f);
+        style.Colors[ImGuiCol_TitleBgActive] = ImVec4(0.07f, 0.07f, 0.09f, 1.00f);
+        style.Colors[ImGuiCol_MenuBarBg] = ImVec4(0.10f, 0.09f, 0.12f, 1.00f);
+        style.Colors[ImGuiCol_ScrollbarBg] = ImVec4(0.10f, 0.09f, 0.12f, 1.00f);
+        style.Colors[ImGuiCol_ScrollbarGrab] = ImVec4(0.80f, 0.80f, 0.83f, 0.31f);
+        style.Colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.56f, 0.56f, 0.58f, 1.00f);
+        style.Colors[ImGuiCol_ScrollbarGrabActive] = ImVec4(0.06f, 0.05f, 0.07f, 1.00f);
+        style.Colors[ImGuiCol_CheckMark] = ImVec4(0.80f, 0.80f, 0.83f, 0.31f);
+        style.Colors[ImGuiCol_SliderGrab] = ImVec4(0.80f, 0.80f, 0.83f, 0.31f);
+        style.Colors[ImGuiCol_SliderGrabActive] = ImVec4(0.06f, 0.05f, 0.07f, 1.00f);
+        style.Colors[ImGuiCol_Button] = ImVec4(0.20f, 0.09f, 0.22f, 1.00f);
+        style.Colors[ImGuiCol_ButtonHovered] = ImVec4(0.24f, 0.23f, 0.29f, 1.00f);
+        style.Colors[ImGuiCol_ButtonActive] = ImVec4(0.56f, 0.56f, 0.58f, 1.00f);
+        style.Colors[ImGuiCol_Header] = ImVec4(0.10f, 0.09f, 0.12f, 1.00f);
+        style.Colors[ImGuiCol_HeaderHovered] = ImVec4(0.56f, 0.56f, 0.58f, 1.00f);
+        style.Colors[ImGuiCol_HeaderActive] = ImVec4(0.06f, 0.05f, 0.07f, 1.00f);
+        style.Colors[ImGuiCol_ResizeGrip] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+        style.Colors[ImGuiCol_ResizeGripHovered] = ImVec4(0.56f, 0.56f, 0.58f, 1.00f);
+        style.Colors[ImGuiCol_ResizeGripActive] = ImVec4(0.06f, 0.05f, 0.07f, 1.00f);
+        style.Colors[ImGuiCol_PlotLines] = ImVec4(0.40f, 0.39f, 0.38f, 0.63f);
+        style.Colors[ImGuiCol_PlotLinesHovered] = ImVec4(0.25f, 1.00f, 0.00f, 1.00f);
+        style.Colors[ImGuiCol_PlotHistogram] = ImVec4(0.40f, 0.39f, 0.38f, 0.63f);
+        style.Colors[ImGuiCol_PlotHistogramHovered] = ImVec4(0.25f, 1.00f, 0.00f, 1.00f);
+        style.Colors[ImGuiCol_TextSelectedBg] = ImVec4(0.25f, 1.00f, 0.00f, 0.43f);
+    }
+
     if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
     {
         style.WindowRounding = 0.0f;
@@ -89,9 +128,10 @@ int main(int, char**)
     Signal inputSignal, outputSignal;
     PlotInput inPlotInput(&inputSignal), outPlotInput(&outputSignal);
     std::vector<std::unique_ptr<AudioEffect>> effects;
+    std::future<Signal> outSignalFuture;
 
     bool bShowGenerators = false;
-    ImVec2 buttonSize(200, 70);
+    ImVec2 buttonSize(190, 50);
     std::string messageSaveSuccesful = "";
 
 	while (!glfwWindowShouldClose(window))
@@ -162,24 +202,25 @@ int main(int, char**)
                 if (ImGui::IsItemHovered()) ImGui::SetTooltip("Generate signal from preset waveform.");
             }
 
+            ImGui::Separator();
+
             // Effect List
             {
                 ImGui::Text("Audio Effects");
-                ImGui::SameLine();
-                static bool bUseAVX = true;
-                ImGui::Checkbox("Use AVX", &bUseAVX);
-
-                ImGui::Separator();
-
-                for (auto& effect : effects)
+                int toRemove = -1;
+                for (uint32_t i = 0; i < effects.size(); i++)
                 {
-                    effect->DrawGUI();
+                    effects[i]->DrawGUI();
+                    std::string name = "Remove##" + std::to_string(i);
+                    if (ImGui::Button(name.c_str())) toRemove = i;
                     ImGui::Separator();
                 }
 
+                if (toRemove > -1) effects.erase(effects.begin() + toRemove);
+
                 const char* effectNames[] = { "Echo", "Derivative" };
                 static int effectIndex = 0;
-                ImGui::Combo(" ", &effectIndex, effectNames, IM_ARRAYSIZE(effectNames));
+                ImGui::Combo("##effectNames", &effectIndex, effectNames, IM_ARRAYSIZE(effectNames));
                 ImGui::SameLine();
                 if (ImGui::Button("Add Effect"))
                 {
@@ -187,92 +228,52 @@ int main(int, char**)
                     else if (effectIndex == 1) effects.emplace_back(new DerivativeEffect);
                 }
 
-                if (ImGui::Button("Apply", buttonSize))
+                if (bFilterThreadRunning)
+                {
+                    ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
+                    ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+                }
+
+                static bool bUseAVX = true;
+                if (ImGui::Button("Apply", ImVec2(128, 45)))
                 {
                     if (inputSignal.data.size() > 0)
                     {
                         if (effects.size() == 0)
                         {
                             outputSignal = inputSignal;
+                            outPlotInput = PlotInput(&outputSignal);
                         }
                         else
                         {
-                            Signal temp = inputSignal;
-                            for (auto& effect : effects)
-                            {
-                                effect->Apply(temp, outputSignal, bUseAVX);
-                                temp = outputSignal;
-                            }
+                            std::promise<Signal> outSignalPromise;
+                            outSignalFuture = outSignalPromise.get_future();
+                            ApplyEffectsAsync(inputSignal, outSignalPromise, effects, bUseAVX);
                         }
-
-                        outPlotInput = PlotInput(&outputSignal);
                     }
                 }
 
-                //static const char* item_names[] = { "Item One", "Item Two", "Item Three", "Item Four", "Item Five" };
-                //for (int n = 0; n < IM_ARRAYSIZE(item_names); n++)
-                //{
-                //    const char* item = item_names[n];
-                //    ImGui::Selectable(item);
+                ImGui::SameLine();
+                ImGui::Checkbox("Use AVX", &bUseAVX);
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Use AVX instructions to accelerate filter processing.");
+                ImGui::Separator();
 
-                //    ImGui::DragInt()
+                static bool bFilterWasRunning = false;
+                if (bFilterThreadRunning) bFilterWasRunning = true;
+                if (bFilterWasRunning && !bFilterThreadRunning)
+                {
+                    outputSignal = outSignalFuture.get();
+                    outPlotInput = PlotInput(&outputSignal);
+                }
 
-                //    if (ImGui::IsItemActive() && !ImGui::IsItemHovered())
-                //    {
-                //        int n_next = n + (ImGui::GetMouseDragDelta(0).y < 0.f ? -1 : 1);
-                //        if (n_next >= 0 && n_next < IM_ARRAYSIZE(item_names))
-                //        {
-                //            item_names[n] = item_names[n_next];
-                //            item_names[n_next] = item;
-                //            ImGui::ResetMouseDragDelta();
-                //        }
-                //    }
-                //}
+                if (bFilterThreadRunning)
+                {
+                    ImGui::PopItemFlag();
+                    ImGui::PopStyleVar();
 
-                //auto pos = ImGui::GetCursorPos();
-                //static int selected = false;
-                //for (int n = 0; n < 10; n++)
-                //{
-                //    ImGui::PushID(n);
-                //
-                //    char buf[32];
-                //    sprintf(buf, "##Object %d", n);
-                //
-                //    ImGui::SetCursorPos(ImVec2(pos.x, pos.y));
-                //    if (ImGui::Selectable(buf, n == selected, 0, ImVec2(100, 50))) {
-                //        selected = n;
-                //    }
-                //    ImGui::SetItemAllowOverlap();
-                //
-                //    ImGui::SetCursorPos(ImVec2(pos.x, pos.y));
-                //    ImGui::Text("foo");
-                //
-                //    ImGui::SetCursorPos(ImVec2(pos.x + 30, pos.y+5));
-                //    if(ImGui::Button("do thing", ImVec2(70, 30)))
-                //    {
-                //        ImGui::OpenPopup("Setup?");
-                //        selected = n;
-                //        printf("SETUP CLICKED %d\n", n);
-                //    }
-                //
-                //    if (ImGui::BeginPopupModal("Setup?", NULL, ImGuiWindowFlags_AlwaysAutoResize))
-                //    {
-                //        ImGuiContext& g = *GImGui;
-                //        ImGuiWindow* window = g.CurrentWindow;
-                //        ImVec2 pos_before = window->DC.CursorPos;
-                //
-                //        ImGui::Text("Setup Popup");
-                //        if (ImGui::Button("OK", ImVec2(120, 0))) { printf("OK PRESSED!\n"); ImGui::CloseCurrentPopup(); }
-                //        ImGui::EndPopup();
-                //    }
-                //
-                //    ImGui::SetCursorPos(ImVec2(pos.x, pos.y+20));
-                //    ImGui::Text("bar");
-                //
-                //    pos.y += 55;
-                //
-                //    ImGui::PopID();
-                //}
+                    ImGui::SameLine();
+                    ImSpinner::SpinnerAng("Spinner", 16.0f, 6.0f, ImSpinner::white, ImColor(255, 255, 255, 128), 4.0f, TAU / 4.0f);
+                }
             }
 
             // Output Waveform
@@ -351,6 +352,7 @@ int main(int, char**)
         if (bShowGenerators)
         {
             ImGui::Begin("Generators", &bShowGenerators);
+            ImGui::SetWindowSize(ImVec2(1000, 700), ImGuiCond_FirstUseEver);
             if (ImGui::IsKeyPressed(ImGuiKey::ImGuiKey_Escape)) bShowGenerators = false;
 
             static int generatorFrequency = 440;
@@ -425,7 +427,7 @@ int main(int, char**)
             static int generatorSampleRate = 100000;
             static float generatorDuration = 1.0f;
             ImGui::DragInt("Frequency", &generatorFrequency, 1.0f, 50, 1000);
-            ImGui::DragFloat("Duration (s)", &generatorDuration, 1.0f, 0.1f, 60.0f);
+            ImGui::DragFloat("Duration (s)", &generatorDuration, 1.0f, 0.1f, 10.0f);
 
             if (ImGui::Button("Generate", buttonSize))
             {

@@ -10,18 +10,22 @@
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 #include "implot/implot.h"
+#include "imspinner/imspinner.h"
 #define GL_SILENCE_DEPRECATION
 #include "GLFW/glfw3.h" // Will drag system OpenGL headers
 #include "AudioFile/AudioFile.h"
 #include "nfd.h"
 
+#ifndef _WINDOWS
 #include "pulse/pulseaudio.h"
 #include "pulse/simple.h"
 #include "pulse/error.h"
+#endif
 
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <future>
 #include <immintrin.h>
 #include <iostream>
 #include <memory>
@@ -30,6 +34,8 @@
 #include <vector>
 
 #define TAU 6.2831855
+
+std::atomic<bool> bFilterThreadRunning { false };
 
 // The number of floats that fit into an AVX register.
 constexpr uint32_t AVX_FLOAT_COUNT = 8u;
@@ -280,10 +286,10 @@ uint32_t GenerateSignal(float(*generator)(float), float frequency, uint32_t samp
     return sampleRate;
 }
 
-struct AudioEffect
-{
+struct AudioEffect {
     virtual void Apply(const Signal& inSignal, Signal& outSignal, bool bUseAVX=true) const = 0;
     virtual void DrawGUI() = 0;
+    virtual AudioEffect* Clone() = 0;
 };
 
 struct EchoEffect : public AudioEffect
@@ -308,6 +314,13 @@ struct EchoEffect : public AudioEffect
         ImGui::DragFloat("Delay", &delay, 0.1f, 0.0f, 5.0f);
     }
 
+    AudioEffect* Clone() override
+    {
+        AudioEffect* clone = new EchoEffect();
+        ((EchoEffect*)clone)->delay = delay;
+        return clone;
+    }
+
     float delay = 1.0f;
 };
 
@@ -324,6 +337,11 @@ struct DerivativeEffect : public AudioEffect
     void DrawGUI() override
     {
         ImGui::Text("Derivative");
+    }
+
+    AudioEffect* Clone() override
+    {
+        return new DerivativeEffect();
     }
 
     std::vector<float> derivativeFilter = {
@@ -369,3 +387,37 @@ struct DerivativeEffect : public AudioEffect
         0.05553547436862413 ,
     };
 };
+
+static void ApplyEffectsInternal(Signal inSignal, std::promise<Signal>&& outSignal, std::vector<AudioEffect*> effects, bool bUseAVX)
+{
+    bFilterThreadRunning = true;
+    Signal temp;
+    for (AudioEffect* effect : effects)
+    {
+        effect->Apply(inSignal, temp, bUseAVX);
+        inSignal = temp;
+    }
+
+    for (auto& effect : effects) delete(effect);
+
+    outSignal.set_value(temp);
+    bFilterThreadRunning = false;
+}
+
+void ApplyEffectsAsync(const Signal& inSignal, std::promise<Signal>& outSignalPromise, const std::vector<std::unique_ptr<AudioEffect>>& effects, bool bUseAVX)
+{
+    Signal sig;
+    sig.data.reserve(inSignal.data.size());
+    sig.sampleRate = inSignal.sampleRate;
+    for (uint32_t i = 0; i < inSignal.data.size(); i++)
+    {
+        sig.data.push_back(inSignal.data[i]);
+    }
+
+    std::vector<AudioEffect*> effectsCopy; // Must copy the unique pointers to avoid race conditions
+    effectsCopy.reserve(effects.size());
+    for (const auto& effect : effects) effectsCopy.push_back(effect->Clone());
+
+    std::thread filterThread(ApplyEffectsInternal, sig, std::move(outSignalPromise), effectsCopy, bUseAVX);
+    //filterThread.join();
+}

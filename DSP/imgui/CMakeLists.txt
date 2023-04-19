@@ -1,4 +1,4 @@
-target_sources(${PROJECT_NAME} PRIVATE
+set(IMGUI_SOURCES
     imgui.h
     imgui.cpp
 
@@ -23,7 +23,12 @@ target_sources(${PROJECT_NAME} PRIVATE
     implot/implot_demo.cpp
     implot/implot_internal.h
     implot/implot_items.cpp
+
+    imspinner/imspinner.h
 )
+
+target_sources(${PROJECT_NAME} PRIVATE ${IMGUI_SOURCES})
+source_group(thirdparty/imgui FILES ${IMGUI_SOURCES})
 
 find_package(OpenGL REQUIRED)
 find_package(GLFW3)

@@ -5,10 +5,12 @@ project(DSP)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/")
+
+set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT ${PROJECT_NAME})
 
-
 add_executable(${PROJECT_NAME} main.cpp DSP.h ${CMAKE_CURRENT_SOURCE_DIR}/AudioFile/AudioFile.h)
+source_group(thirdparty/AudioFile AudioFile/AudioFile.h)
 
 if(WIN32)
      target_link_libraries(${PROJECT_NAME} PRIVATE winmm.lib)
@@ -36,8 +38,5 @@ endif()
 add_subdirectory(imgui)
 add_subdirectory(nativefiledialog)
 
-file(COPY        "${CMAKE_CURRENT_SOURCE_DIR}/data/input/test-audio.wav"
-     DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/data/input")
-
-file(COPY        "${CMAKE_CURRENT_SOURCE_DIR}/data/input/thomas.wav"
-     DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/data/input")
+file(COPY        "${CMAKE_CURRENT_SOURCE_DIR}/data"
+     DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
