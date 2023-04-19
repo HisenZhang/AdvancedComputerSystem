@@ -166,7 +166,7 @@ int main(int, char**)
                         inPlotInput.bInputDirty = false;
                     }
 
-                    ImPlot::SetupAxes("Time (s)", NULL, axisFlag | ImPlotAxisFlags_PanStretch | ImPlotAxisFlags_LockMin, axisFlag | ImPlotAxisFlags_Lock);
+                    ImPlot::SetupAxes("Time (s)", NULL, axisFlag /*| ImPlotAxisFlags_PanStretch | ImPlotAxisFlags_LockMin*/, axisFlag | ImPlotAxisFlags_Lock);
                     ImPlot::SetupAxisLimits(ImAxis_X1, 0.0f, 10.0f);
                     ImPlot::SetupAxisLimits(ImAxis_Y1, -1.1f, 1.1f);
                     ImPlot::SetNextLineStyle(ImColor(1.0f, 0.0f, 0.0f, 1.0f), 2.0f);
@@ -286,7 +286,7 @@ int main(int, char**)
                         outPlotInput.bInputDirty = false;
                     }
 
-                    ImPlot::SetupAxes("Time (s)", NULL, axisFlag | ImPlotAxisFlags_PanStretch | ImPlotAxisFlags_LockMin, axisFlag | ImPlotAxisFlags_Lock);
+                    ImPlot::SetupAxes("Time (s)", NULL, axisFlag /*| ImPlotAxisFlags_PanStretch | ImPlotAxisFlags_LockMin*/, axisFlag | ImPlotAxisFlags_Lock);
                     ImPlot::SetupAxisLimits(ImAxis_X1, 0.0f, 10.0f);
                     ImPlot::SetupAxisLimits(ImAxis_Y1, -1.1f, 1.1f);
                     ImPlot::SetNextLineStyle(ImColor(1.0f, 0.0f, 0.0f, 1.0f), 2.0f);
