@@ -50,26 +50,18 @@ float highestMultipleOfNIn(float in, float N) {
 
 struct FilterInput // From https://thewolfsound.com/fir-filter-with-simd/
 {
-    FilterInput(const std::vector<float>& inSignal, const std::vector<float>& filter)
+    FilterInput(const std::vector<float>& inSignal, const std::vector<float>& inFilter)
     {
-        size_t alignment = 1u;
-        const auto minimalPaddedSize = inSignal.size() + 2 * filter.size() - 2u;
-        const auto alignedPaddedSize = alignment * (highestMultipleOfNIn(minimalPaddedSize - 1u, alignment) + 1u);
+        // Pad beginning of signal with filter.size() many zeros
+        const auto inputLength = inSignal.size() + 2 * inFilter.size() - 2u;
+        this->signal.resize(inputLength, 0.f);
+        std::copy(inSignal.begin(), inSignal.end(), this->signal.begin() + inFilter.size() - 1u);
 
-        const auto inputLength = alignedPaddedSize;
-        this->signal.resize(inputLength, 0.f); // Pad input signal with zeros
-        std::copy(inSignal.begin(), inSignal.end(), this->signal.begin() + filter.size() - 1u);
+        outputLength = inSignal.size() + inFilter.size() - 1u;
 
-        outputLength = inSignal.size() + filter.size() - 1u;
-
-        const auto filterLength = alignment * (highestMultipleOfNIn(filter.size() - 1u, alignment) + 1);
-        this->filter.resize(filterLength);
-
-        // Reverse and pad with zeros
-        std::reverse_copy(filter.begin(), filter.end(), this->filter.begin());
-        for (auto i = filter.size(); i < this->filter.size(); ++i) {
-            this->filter[i] = 0.f;
-        }
+        // Copy the filter in reverse for the convolution
+        this->filter.resize(inFilter.size(), 0.0f);
+        std::reverse_copy(inFilter.begin(), inFilter.end(), this->filter.begin());
     }
 
     std::vector<float> signal;
@@ -77,25 +69,31 @@ struct FilterInput // From https://thewolfsound.com/fir-filter-with-simd/
     uint32_t outputLength;
 };
 
-void applyFirFilter(const FilterInput& input, std::vector<float>& outSignal) {
+void applyFirFilter(const FilterInput& input, std::vector<float>& outSignal)
+{
     outSignal.resize(input.outputLength);
 
-    for (uint32_t i = 0; i < input.outputLength; ++i) {
+    for (uint32_t i = 0; i < outSignal.size(); ++i)
+    {
         outSignal[i] = 0.0f;
-        for (uint32_t j = 0; j < input.filter.size(); ++j) {
+        for (uint32_t j = 0; j < input.filter.size(); ++j)
+        {
             outSignal[i] += input.signal[i + j] * input.filter[j];
         }
     }
 }
 
-void applyFirFilterAVX(const FilterInput& input, std::vector<float>& outSignal) {
+void applyFirFilterAVX(const FilterInput& input, std::vector<float>& outSignal)
+{
     outSignal.resize(input.outputLength);
 
     std::array<float, AVX_FLOAT_COUNT> result;
-    for (uint32_t i = 0; i < input.outputLength; ++i) {
+    for (uint32_t i = 0; i < input.outputLength; ++i)
+    {
         __m256 accumulator = _mm256_setzero_ps();
         
-        for (uint32_t j = 0; j < input.filter.size(); j += AVX_FLOAT_COUNT) {
+        for (uint32_t j = 0; j < input.filter.size(); j += AVX_FLOAT_COUNT)
+        {
             __m256 signalLoad = _mm256_loadu_ps(input.signal.data() + i + j); // load signal and filter
             __m256 filterLoad = _mm256_loadu_ps(input.filter.data() + j);
             __m256 temp       = _mm256_mul_ps(signalLoad, filterLoad);        // element-wise multiply
@@ -390,7 +388,6 @@ struct DerivativeEffect : public AudioEffect
 
 static void ApplyEffectsInternal(Signal inSignal, std::promise<Signal>&& outSignal, std::vector<AudioEffect*> effects, bool bUseAVX)
 {
-    bFilterThreadRunning = true;
     Signal temp;
     for (AudioEffect* effect : effects)
     {
@@ -401,23 +398,15 @@ static void ApplyEffectsInternal(Signal inSignal, std::promise<Signal>&& outSign
     for (auto& effect : effects) delete(effect);
 
     outSignal.set_value(temp);
-    bFilterThreadRunning = false;
+    bFilterThreadRunning.store(false);
 }
 
 void ApplyEffectsAsync(const Signal& inSignal, std::promise<Signal>& outSignalPromise, const std::vector<std::unique_ptr<AudioEffect>>& effects, bool bUseAVX)
 {
-    Signal sig;
-    sig.data.reserve(inSignal.data.size());
-    sig.sampleRate = inSignal.sampleRate;
-    for (uint32_t i = 0; i < inSignal.data.size(); i++)
-    {
-        sig.data.push_back(inSignal.data[i]);
-    }
-
     std::vector<AudioEffect*> effectsCopy; // Must copy the unique pointers to avoid race conditions
     effectsCopy.reserve(effects.size());
     for (const auto& effect : effects) effectsCopy.push_back(effect->Clone());
 
-    std::thread filterThread(ApplyEffectsInternal, sig, std::move(outSignalPromise), effectsCopy, bUseAVX);
-    //filterThread.join();
+    std::thread filterThread(ApplyEffectsInternal, inSignal, std::move(outSignalPromise), effectsCopy, bUseAVX);
+    filterThread.detach();
 }

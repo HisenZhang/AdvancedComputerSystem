@@ -235,6 +235,8 @@ int main(int, char**)
                 }
 
                 static bool bUseAVX = true;
+                static bool bFilterThreadStartedThisTime = false;
+                static bool bFilterThreadWasRunning = false;
                 if (ImGui::Button("Apply", ImVec2(128, 45)))
                 {
                     if (inputSignal.data.size() > 0)
@@ -246,6 +248,10 @@ int main(int, char**)
                         }
                         else
                         {
+                            bFilterThreadWasRunning = true;
+                            bFilterThreadRunning.store(true);
+                            bFilterThreadStartedThisTime = true;
+
                             std::promise<Signal> outSignalPromise;
                             outSignalFuture = outSignalPromise.get_future();
                             ApplyEffectsAsync(inputSignal, outSignalPromise, effects, bUseAVX);
@@ -258,22 +264,22 @@ int main(int, char**)
                 if (ImGui::IsItemHovered()) ImGui::SetTooltip("Use AVX instructions to accelerate filter processing.");
                 ImGui::Separator();
 
-                static bool bFilterWasRunning = false;
-                if (bFilterThreadRunning) bFilterWasRunning = true;
-                if (bFilterWasRunning && !bFilterThreadRunning)
+                if (bFilterThreadWasRunning && !bFilterThreadRunning)
                 {
                     outputSignal = outSignalFuture.get();
                     outPlotInput = PlotInput(&outputSignal);
+                    bFilterThreadWasRunning = false;
                 }
 
-                if (bFilterThreadRunning)
+                if (bFilterThreadRunning && !bFilterThreadStartedThisTime)
                 {
                     ImGui::PopItemFlag();
                     ImGui::PopStyleVar();
-
-                    ImGui::SameLine();
+                    //ImGui::SameLine();
                     ImSpinner::SpinnerAng("Spinner", 16.0f, 6.0f, ImSpinner::white, ImColor(255, 255, 255, 128), 4.0f, TAU / 4.0f);
                 }
+
+                bFilterThreadStartedThisTime = false;
             }
 
             // Output Waveform
