@@ -290,7 +290,7 @@ struct AudioEffect {
     virtual AudioEffect* Clone() = 0;
 };
 
-struct EchoEffect : public AudioEffect
+struct DelayEffect : public AudioEffect
 {
     void Apply(const Signal& inSignal, Signal& outSignal, bool bUseAVX=true) const override
     {
@@ -308,14 +308,14 @@ struct EchoEffect : public AudioEffect
 
     void DrawGUI() override
     {
-        ImGui::Text("Echo");
+        ImGui::Text("Delay");
         ImGui::DragFloat("Delay", &delay, 0.1f, 0.0f, 5.0f);
     }
 
     AudioEffect* Clone() override
     {
-        AudioEffect* clone = new EchoEffect();
-        ((EchoEffect*)clone)->delay = delay;
+        AudioEffect* clone = new DelayEffect();
+        ((DelayEffect*)clone)->delay = delay;
         return clone;
     }
 

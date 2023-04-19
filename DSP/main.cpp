@@ -222,13 +222,13 @@ int main(int, char**)
                 const float combo_width = width * 0.12f;
                 ImGui::SetNextItemWidth(combo_width);
 
-                const char* effectNames[] = { "Echo", "Derivative" };
+                const char* effectNames[] = { "Delay", "Derivative" };
                 static int effectIndex = 0;
                 ImGui::Combo("##effectNames", &effectIndex, effectNames, IM_ARRAYSIZE(effectNames));
                 ImGui::SameLine();
                 if (ImGui::Button("Add Effect"))
                 {
-                    if (effectIndex == 0) effects.emplace_back(new EchoEffect);
+                    if (effectIndex == 0) effects.emplace_back(new DelayEffect);
                     else if (effectIndex == 1) effects.emplace_back(new DerivativeEffect);
                 }
 
@@ -255,6 +255,8 @@ int main(int, char**)
                             bFilterThreadWasRunning = true;
                             bFilterThreadRunning.store(true);
                             bFilterThreadStartedThisTime = true;
+
+                            outputSignal.data.clear();
 
                             std::promise<Signal> outSignalPromise;
                             outSignalFuture = outSignalPromise.get_future();
