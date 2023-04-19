@@ -87,12 +87,13 @@ void applyFirFilter(const FilterInput& input, std::vector<float>& outSignal)
 
 void applyFirFilterAVX(const FilterInput& input, std::vector<float>& outSignal)
 {
-    outSignal.resize(input.outputLength);
+    outSignal.resize(input.outputLength, 0.0f);
 
     std::array<float, AVX_FLOAT_COUNT> result;
     for (uint32_t i = 0; i < input.outputLength; ++i)
     {
         __m256 accumulator = _mm256_setzero_ps();
+        result.fill(0.0f);
         
         for (uint32_t j = 0; j < input.filter.size(); j += AVX_FLOAT_COUNT)
         {
@@ -322,7 +323,7 @@ void PlaySignal(const Signal& signal)
     //PlaySound((LPCSTR)filepath.c_str(), NULL, SND_FILENAME);
     //PlaySound(MAKEINTRESOURCE((char*)wavBuffer), NULL, SND_FILENAME);
     PlaySound(wavBuffer, NULL, SND_MEMORY | SND_ASYNC);
-    free(wavBuffer);
+    //free(wavBuffer);
 #else
     bPlaybackAudioAsync.store(true);
     std::thread soundThread(PlayBufferAsync, data, numSamples, signal.sampleRate);
@@ -333,7 +334,7 @@ void PlaySignal(const Signal& signal)
 void StopAudio()
 {
 #ifdef _WINDOWS
-    PlaySoundA(NULL, NULL, 0);
+    PlaySound(NULL, NULL, 0);
 #else
     bPlaybackAudioAsync.store(false);
 #endif

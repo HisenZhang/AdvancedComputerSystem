@@ -4,9 +4,11 @@
 #include <string>
 
 // TODO:
-// - Implement different filter types (reverb, low pass, high pass, band pass, etc.)
+// - Implement different filter types
 // - Benchmarking
 // - Center convolution
+// - Fix issue with thomas file
+// - Undefined behavior in AVX code ?
 
 struct PlotInput
 {
@@ -157,7 +159,7 @@ int main(int, char**)
 
             // Input Waveform
             {
-                if (ImPlot::BeginPlot("Input Signal", ImVec2(-1, 400), ImPlotFlags_NoLegend | ImPlotFlags_NoMouseText)) {
+                if (ImPlot::BeginPlot("Input Signal", ImVec2(-1, 400), ImPlotFlags_NoLegend | ImPlotFlags_NoMouseText | ImPlotFlags_NoMenus)) {
                     ImPlotAxisFlags axisFlag = ImPlotAxisFlags_NoMenus | ImPlotAxisFlags_NoSideSwitch | ImPlotAxisFlags_NoHighlight;
                     if (inPlotInput.bInputDirty)
                     {
@@ -197,7 +199,7 @@ int main(int, char**)
                 }
                 if (ImGui::IsItemHovered()) ImGui::SetTooltip("Load an audio file (.wav only).");
                 ImGui::SameLine();
-                if (ImGui::Button("Generators", buttonSize)) bShowGenerators = true;
+                if (ImGui::Button("Generators", buttonSize)) bShowGenerators = !bShowGenerators;
                 if (ImGui::IsItemHovered()) ImGui::SetTooltip("Generate signal from preset waveform.");
                 ImGui::SameLine();
                 if (ImGui::Button("Play##Input", buttonSize))
@@ -308,7 +310,7 @@ int main(int, char**)
 
             // Output Waveform
             {
-                if (ImPlot::BeginPlot("Output Signal", ImVec2(-1, 400), ImPlotFlags_NoLegend | ImPlotFlags_NoMouseText)) {
+                if (ImPlot::BeginPlot("Output Signal", ImVec2(-1, 400), ImPlotFlags_NoLegend | ImPlotFlags_NoMouseText | ImPlotFlags_NoMenus)) {
                     ImPlotAxisFlags axisFlag = ImPlotAxisFlags_NoMenus | ImPlotAxisFlags_NoSideSwitch | ImPlotAxisFlags_NoHighlight;
                     if (outPlotInput.bInputDirty)
                     {
