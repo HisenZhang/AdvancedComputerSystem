@@ -5,6 +5,7 @@
 #else
 #endif
 
+#ifndef BENCHMARK
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "imgui_impl_glfw.h"
@@ -13,14 +14,19 @@
 #include "imspinner/imspinner.h"
 #define GL_SILENCE_DEPRECATION
 #include "GLFW/glfw3.h" // Will drag system OpenGL headers
-#include "AudioFile/AudioFile.h"
 #include "nfd.h"
+#endif
+
 
 #ifndef _WINDOWS
 #include "pulse/pulseaudio.h"
 #include "pulse/simple.h"
 #include "pulse/error.h"
 #endif
+
+#include "ctpl_stl.h"
+
+#include "AudioFile/AudioFile.h"
 
 #include <algorithm>
 #include <array>
@@ -32,8 +38,14 @@
 #include <numeric>
 #include <thread>
 #include <vector>
+#include <cstring>
+#include <cmath>
 
 #define TAU 6.2831855
+#define CHUNK_SIZE 44100 * 60
+#define N_WORKER 0 // number of worker, or use 0 for default hardware value 
+
+std::mutex mtx;
 
 std::atomic<bool> bFilterThreadRunning { false };
 
@@ -87,7 +99,7 @@ void applyFirFilter(const FilterInput& input, std::vector<float>& outSignal)
 
 void applyFirFilterAVX(const FilterInput& input, std::vector<float>& outSignal)
 {
-    outSignal.resize(input.outputLength, 0.0f);
+    outSignal.resize(input.outputLength);
 
     std::array<float, AVX_FLOAT_COUNT> result;
     for (uint32_t i = 0; i < input.outputLength; ++i)
@@ -108,9 +120,66 @@ void applyFirFilterAVX(const FilterInput& input, std::vector<float>& outSignal)
     }
 }
 
+void applyFirFilterAVXParallelWorker(int id, const FilterInput& input, std::vector<float>& outSignal, size_t index)
+{   
+    int chunkSize = CHUNK_SIZE;
+    if (index+CHUNK_SIZE > input.signal.size()) {
+        chunkSize = input.outputLength-index;
+    }
+
+    // std::cout << "worker " << id << " working on sample " << index << " to " << index + chunkSize << std::endl;
+
+    std::array<float, AVX_FLOAT_COUNT> result;
+    for (uint32_t i = 0; i < chunkSize; ++i)
+    {
+        __m256 accumulator = _mm256_setzero_ps();
+        result.fill(0.0f);
+        
+        for (uint32_t j = 0; j < input.filter.size(); j += AVX_FLOAT_COUNT)
+        {
+            __m256 signalLoad = _mm256_loadu_ps(input.signal.data() + i + j); // load signal and filter
+            __m256 filterLoad = _mm256_loadu_ps(input.filter.data() + j);
+            __m256 temp       = _mm256_mul_ps(signalLoad, filterLoad);        // element-wise multiply
+            accumulator       = _mm256_add_ps(accumulator, temp);             // element-wise add
+        }
+        
+        _mm256_storeu_ps(result.data(), accumulator); // move the accumulator into the result and sum
+                
+        if (i == 0) {
+            // This element will overlap from other chunks, use +=
+            mtx.lock();
+            outSignal[i+index] += std::accumulate(result.begin(), result.end(), 0.f);
+            mtx.unlock();
+        } else {        
+            // or we save memory bandwidth by using = only
+            outSignal[i+index] = std::accumulate(result.begin(), result.end(), 0.f);
+        }
+    }        
+}
+
+void applyFirFilterAVXParallel(const FilterInput& input, std::vector<float>& outSignal)
+{
+    // std::cout << "AVX Parallel, samples: " << input.signal.size() << std::endl;
+
+    outSignal.resize(input.outputLength);
+
+    ctpl::thread_pool pool(N_WORKER <= 0 ? std::thread::hardware_concurrency() : N_WORKER);
+    size_t index = 0;
+
+    while(index < input.signal.size()) {
+        pool.push(applyFirFilterAVXParallelWorker, input, outSignal, index);
+        index += CHUNK_SIZE;
+    }
+
+    pool.stop(true);
+    
+}
+
 struct AudioEffect {
     virtual void Apply(const Signal& inSignal, Signal& outSignal, bool bUseAVX=true) const = 0;
+    #ifndef BENCHMARK
     virtual void DrawGUI() = 0;
+    #endif
     virtual AudioEffect* Clone() = 0;
 };
 
@@ -129,12 +198,16 @@ struct DelayEffect : public AudioEffect
         else applyFirFilter(input, outSignal.data);
         outSignal.sampleRate = inSignal.sampleRate;
     }
-
+    
+    #ifndef BENCHMARK
     void DrawGUI() override
     {
         ImGui::Text("Delay");
         ImGui::DragFloat("Delay", &delay, 0.1f, 0.0f, 5.0f);
     }
+
+    #endif
+
 
     AudioEffect* Clone() override
     {
@@ -155,11 +228,12 @@ struct DerivativeEffect : public AudioEffect
         else applyFirFilter(input, outSignal.data);
         outSignal.sampleRate = inSignal.sampleRate;
     }
-
+    #ifndef BENCHMARK
     void DrawGUI() override
     {
         ImGui::Text("Derivative");
     }
+    #endif
 
     AudioEffect* Clone() override
     {
@@ -277,7 +351,7 @@ public:
 
     static void CleanupFrame(float dt)
     {
-        std::cout << "Frame\n";
+        // std::cout << "Frame\n";
 
         for (auto it = cleanupList.begin(); it != cleanupList.end();)
         {
@@ -339,7 +413,7 @@ void PlayBufferAsync(int16_t* audioBuffer, uint32_t numSamples, uint32_t samplin
     bPlaybackAudioAsync.store(false);
 
     pa_simple_free(s);
-    free(audioBuffer);
+    // free(audioBuffer);
 }
 #endif
 
