@@ -30,6 +30,7 @@
 #include <array>
 #include <vector>
 #include <map>
+#include <ctype.h>
 
 #ifdef __has_include
     #if !__has_include(<imgui.h>)
