@@ -23,14 +23,15 @@
 #include "pulse/error.h"
 #endif
 
-#include "ctpl_stl.h"
-
 #include "AudioFile/AudioFile.h"
+#include "ctpl_stl.h"
 
 #include <algorithm>
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <cmath>
+#include <cstring>
 #include <future>
 #include <immintrin.h>
 #include <iostream>
@@ -40,8 +41,6 @@
 #include <random>
 #include <thread>
 #include <vector>
-#include <cstring>
-#include <cmath>
 
 #define TAU 6.2831855
 #define CHUNK_SIZE 44100 * 60
@@ -175,8 +174,6 @@ void applyFirFilterAVXParallelWorker(int id, const FilterInput &input, std::vect
         chunkSize = input.outputLength - index;
     }
 
-    // std::cout << "worker " << id << " working on sample " << index << " to " << index + chunkSize << std::endl;
-
     std::array<float, AVX_FLOAT_COUNT> result;
     for (uint32_t i = 0; i < chunkSize; ++i)
     {
@@ -210,8 +207,6 @@ void applyFirFilterAVXParallelWorker(int id, const FilterInput &input, std::vect
 
 void applyFirFilterAVXParallel(const FilterInput &input, std::vector<float> &outSignal)
 {
-    // std::cout << "AVX Parallel, samples: " << input.signal.size() << std::endl;
-
     outSignal.resize(input.outputLength, 0.0f);
 
     ctpl::thread_pool pool(N_WORKER <= 0 ? std::thread::hardware_concurrency() : N_WORKER);
@@ -697,12 +692,17 @@ float SquareGenerator(float pos)
 
 float TriangleGenerator(float pos)
 {
-    return 1 - fabs(pos - 0.5) * 4;
+    return 1.0f - fabs(pos - 0.5f) * 4.0f;
 }
 
 float SawGenerator(float pos)
 {
-    return pos * 2 - 1;
+    return pos * 2.0f - 1.0f;
+}
+
+float WhiteNoiseGenerator(float pos)
+{
+    return unif(rng) * 2.0f - 1.0f;
 }
 
 float GenerateSignalAtSampleIndex(float (*generator)(float), uint32_t i, float frequency, float sampleRate)
