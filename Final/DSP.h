@@ -25,11 +25,14 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <future>
 #include <immintrin.h>
 #include <iostream>
+#include <list>
 #include <memory>
 #include <numeric>
+#include <random>
 #include <thread>
 #include <vector>
 
@@ -38,32 +41,77 @@
 std::atomic<bool> bFilterThreadRunning { false };
 
 // The number of floats that fit into an AVX register.
-constexpr uint32_t AVX_FLOAT_COUNT = 8u;
+static constexpr uint32_t AVX_FLOAT_COUNT = 8u;
+
+static std::mt19937_64 rng;
+static std::uniform_real_distribution<double> unif(0, 1);
 
 #ifndef _WINDOWS
 std::atomic<bool> bPlaybackAudioAsync;
 #endif
 
+void InitDSP()
+{
+    uint64_t timeSeed = std::chrono::high_resolution_clock::now().time_since_epoch().count();
+    std::seed_seq ss{uint32_t(timeSeed & 0xffffffff), uint32_t(timeSeed>>32)};
+    rng.seed(ss);
+}
+
 struct Signal
 {
     std::vector<float> data;
     uint32_t sampleRate;
+    float gain;
+
+    float GetPeakAmplitude() const
+    {
+        float maxValue = 0.0f;
+        for (uint32_t i = 0; i < data.size(); i++)
+        {
+            float value = fabs(data[i]);
+            if (value > maxValue) maxValue = value;
+        }
+        return maxValue;
+    }
+
+    float GetRMSAmplitude() const
+    {
+        float squaredSum = 0.0f;
+        for (uint32_t i = 0; i < data.size(); i++)
+        {
+            squaredSum += data[i] * data[i];
+        }
+        return sqrt(squaredSum / data.size());
+    }
 };
+
+float GainToDecibel(float gain)
+{
+    return log10(gain) * 20.0f;
+
+}
+
+float DecibelToGain(float db)
+{
+    return powf(10, db / 20.0f);
+}
 
 struct FilterInput // From https://thewolfsound.com/fir-filter-with-simd/
 {
     FilterInput(const std::vector<float>& inSignal, const std::vector<float>& inFilter)
     {
-        // Pad beginning of signal with filter.size() many zeros
-        const auto inputLength = inSignal.size() + 2 * inFilter.size() - 2u;
-        this->signal.resize(inputLength, 0.f);
-        std::copy(inSignal.begin(), inSignal.end(), this->signal.begin() + inFilter.size() - 1u);
+        const size_t filterLength = std::max(inFilter.size(), (size_t)AVX_FLOAT_COUNT);
 
-        outputLength = inSignal.size() + inFilter.size() - 1u;
+        // Pad beginning of signal with filterLength many zeros
+        const size_t inputLength = inSignal.size() + 2 * filterLength - 2u;
+        signal.resize(inputLength, 0.f);
+        std::copy(inSignal.begin(), inSignal.end(), signal.begin() + (filterLength / 2.0f) - 1u);
+
+        outputLength = inSignal.size() + filterLength - 1u;
 
         // Copy the filter in reverse for the convolution
-        this->filter.resize(inFilter.size(), 0.0f);
-        std::reverse_copy(inFilter.begin(), inFilter.end(), this->filter.begin());
+        filter.resize(filterLength, 0.0f);
+        std::reverse_copy(inFilter.begin(), inFilter.end(), filter.begin());
     }
 
     std::vector<float> signal;
@@ -109,14 +157,19 @@ void applyFirFilterAVX(const FilterInput& input, std::vector<float>& outSignal)
 }
 
 struct AudioEffect {
-    virtual void Apply(const Signal& inSignal, Signal& outSignal, bool bUseAVX=true) const = 0;
+    virtual void Apply(const Signal& inSignal, Signal& outSignal, bool bUseAVX = true) const
+    {
+        outSignal.sampleRate = inSignal.sampleRate;
+        outSignal.gain = inSignal.gain;
+    }
+
     virtual void DrawGUI() = 0;
     virtual AudioEffect* Clone() = 0;
 };
 
 struct DelayEffect : public AudioEffect
 {
-    void Apply(const Signal& inSignal, Signal& outSignal, bool bUseAVX=true) const override
+    virtual void Apply(const Signal& inSignal, Signal& outSignal, bool bUseAVX=true) const override
     {
         uint32_t filterLength = inSignal.sampleRate * delay;
 	    std::vector<float> echoFilter(filterLength);
@@ -127,16 +180,17 @@ struct DelayEffect : public AudioEffect
         FilterInput input(inSignal.data, echoFilter);
         if (bUseAVX) applyFirFilterAVX(input, outSignal.data);
         else applyFirFilter(input, outSignal.data);
-        outSignal.sampleRate = inSignal.sampleRate;
+
+        AudioEffect::Apply(inSignal, outSignal);
     }
 
-    void DrawGUI() override
+    virtual void DrawGUI() override
     {
         ImGui::Text("Delay");
         ImGui::DragFloat("Delay", &delay, 0.1f, 0.0f, 5.0f);
     }
 
-    AudioEffect* Clone() override
+    virtual AudioEffect* Clone() override
     {
         AudioEffect* clone = new DelayEffect();
         ((DelayEffect*)clone)->delay = delay;
@@ -148,20 +202,20 @@ struct DelayEffect : public AudioEffect
 
 struct DerivativeEffect : public AudioEffect
 {
-    void Apply(const Signal& inSignal, Signal& outSignal, bool bUseAVX = true) const override
+    virtual void Apply(const Signal& inSignal, Signal& outSignal, bool bUseAVX = true) const override
     {
         FilterInput input(inSignal.data, derivativeFilter);
         if (bUseAVX) applyFirFilterAVX(input, outSignal.data);
         else applyFirFilter(input, outSignal.data);
-        outSignal.sampleRate = inSignal.sampleRate;
+        AudioEffect::Apply(inSignal, outSignal);
     }
 
-    void DrawGUI() override
+    virtual void DrawGUI() override
     {
         ImGui::Text("Derivative");
     }
 
-    AudioEffect* Clone() override
+    virtual AudioEffect* Clone() override
     {
         return new DerivativeEffect();
     }
@@ -208,6 +262,159 @@ struct DerivativeEffect : public AudioEffect
         0.07674634732792313 ,
         0.05553547436862413 ,
     };
+};
+
+struct PeakNormalizationEffect : public AudioEffect
+{
+    virtual void Apply(const Signal& inSignal, Signal& outSignal, bool bUseAVX = true) const override
+    {
+        float gain = DecibelToGain(db);
+        float norm = 1.0f / inSignal.GetPeakAmplitude() * gain;;
+
+        outSignal.data.resize(inSignal.data.size());
+        for (uint32_t i = 0; i < inSignal.data.size(); i++)
+        {
+            outSignal.data[i] = inSignal.data[i] * norm;
+        }
+
+        AudioEffect::Apply(inSignal, outSignal);
+    }
+
+    virtual void DrawGUI() override
+    {
+        ImGui::Text("Peak Normalization");
+        ImGui::DragFloat("Decibels", &db, 0.1f, -10.0f, 10.0f);
+    }
+
+    virtual AudioEffect* Clone() override
+    {
+        AudioEffect* clone = new PeakNormalizationEffect();
+        ((PeakNormalizationEffect*)clone)->db = db;
+        return clone;
+    }
+
+    float db = 0.0f;
+};
+
+struct RMSNormalizationEffect : public AudioEffect
+{
+    virtual void Apply(const Signal& inSignal, Signal& outSignal, bool bUseAVX = true) const override
+    {
+        float squaredSum = 0.0f;
+        for (uint32_t i = 0; i < inSignal.data.size(); i++)
+        {
+            squaredSum += inSignal.data[i] * inSignal.data[i];
+        }
+
+        float desiredRMS = DecibelToGain(db);
+        float gain = sqrt((inSignal.data.size() * desiredRMS * desiredRMS) / squaredSum);
+
+        outSignal.data.resize(inSignal.data.size());
+        for (uint32_t i = 0; i < inSignal.data.size(); i++)
+        {
+            outSignal.data[i] = inSignal.data[i] * gain;
+        }
+
+        AudioEffect::Apply(inSignal, outSignal);
+    }
+
+    virtual void DrawGUI() override
+    {
+        ImGui::Text("RMS Normalization");
+        ImGui::DragFloat("Decibels", &db, 0.1f, -10.0f, 10.0f);
+    }
+
+    virtual AudioEffect* Clone() override
+    {
+        AudioEffect* clone = new RMSNormalizationEffect();
+        ((RMSNormalizationEffect*)clone)->db = db;
+        return clone;
+    }
+
+    float db = 0.0f;
+};
+
+struct ReverseEffect : public AudioEffect {
+    virtual void Apply(const Signal& inSignal, Signal& outSignal, bool bUseAVX = true) const override
+    {
+        outSignal.data.resize(inSignal.data.size());
+        std::reverse_copy(inSignal.data.begin(), inSignal.data.end(), outSignal.data.data());
+        AudioEffect::Apply(inSignal, outSignal);
+    }
+
+    virtual void DrawGUI() override
+    {
+        ImGui::Text("Reverse");
+    }
+
+    virtual AudioEffect* Clone() override
+    {
+        return new ReverseEffect();
+    }
+};
+
+struct GainEffect : public AudioEffect
+{
+    virtual void Apply(const Signal& inSignal, Signal& outSignal, bool bUseAVX = true) const override
+    {
+        float gain = this->gain;
+        if (bInvertPolarity) gain *= -1.0f;
+
+        outSignal.data.resize(inSignal.data.size());
+        for (uint32_t i = 0; i < inSignal.data.size(); i++)
+        {
+            outSignal.data[i] = inSignal.data[i] * gain;
+        }
+
+        AudioEffect::Apply(inSignal, outSignal);
+    }
+
+    virtual void DrawGUI() override
+    {
+        ImGui::Text("Gain");
+        ImGui::DragFloat("Gain", &gain, 0.1f, 0.0f, 10.0f);
+        ImGui::Checkbox("Invert Polarity", &bInvertPolarity);
+    }
+
+    virtual AudioEffect* Clone() override
+    {
+        AudioEffect* clone = new GainEffect();
+        ((GainEffect*)clone)->gain = gain;
+        ((GainEffect*)clone)->bInvertPolarity = bInvertPolarity;
+        return clone;
+    }
+
+    float gain = 1.0f;
+    bool bInvertPolarity = false;
+};
+
+struct DC_OffsetEffect : public AudioEffect
+{
+    virtual void Apply(const Signal& inSignal, Signal& outSignal, bool bUseAVX = true) const override
+    {
+        outSignal.data.resize(inSignal.data.size());
+        for (uint32_t i = 0; i < inSignal.data.size(); i++)
+        {
+            outSignal.data[i] = inSignal.data[i] + offset;
+        }
+
+        AudioEffect::Apply(inSignal, outSignal);
+    }
+
+    virtual void DrawGUI() override
+    {
+        ImGui::Text("DC Offset");
+        ImGui::DragFloat("Offset", &offset, 0.1f, -5.0f, 5.0f);
+    }
+
+    virtual AudioEffect* Clone() override
+    {
+        AudioEffect* clone = new DC_OffsetEffect();
+        ((DC_OffsetEffect*)clone)->offset = offset;
+        return clone;
+    }
+
+    float offset = 0.0f;
 };
 
 #ifdef _WINDOWS
@@ -257,8 +464,6 @@ struct WaveHeader // From https://stackoverflow.com/a/70991482/14865787
 };
 #endif
 
-#include <list>
-
 struct AudioPlaybackCleanup
 {
 private:
@@ -277,16 +482,11 @@ public:
 
     static void CleanupFrame(float dt)
     {
-        std::cout << "Frame\n";
-
         for (auto it = cleanupList.begin(); it != cleanupList.end();)
         {
-            std::cout << it->duration << "\n";
-
             it->duration -= dt;
             if (it->duration < 0.0f)
             {
-                std::cout << "freed!\n";
                 free(it->data);
                 auto prevIt = it;
                 it++;
@@ -400,22 +600,27 @@ void WriteSignal(const Signal& signal, const std::string& path) {
 
 float SineGenerator(float pos)
 {
-  return sin(pos*TAU);
+    return sin(pos*TAU);
 }
 
 float SquareGenerator(float pos)
 {
-  return sin(pos*TAU) > 0.0f ? 1.0f : -1.0f;
+    return sin(pos*TAU) > 0.0f ? 1.0f : -1.0f;
 }
 
 float TriangleGenerator(float pos)
 {
-  return 1-fabs(pos-0.5)*4;
+    return 1-fabs(pos-0.5)*4;
 }
 
 float SawGenerator(float pos)
 {
-  return pos*2-1;
+    return pos*2-1;
+}
+
+float WhiteNoiseGenerator(float pos)
+{
+    return unif(rng) * 2.0f - 1.0f;
 }
 
 float GenerateSignalAtSampleIndex(float(*generator)(float), uint32_t i, float frequency, float sampleRate)

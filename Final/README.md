@@ -26,7 +26,7 @@ Main Window             |  Waveform Generators
 
 Install dependencies (you may need more than these packages):
 
-```sudo apt install gtk2.0 libglfw3 libglfw3-dev```
+```sudo apt install gtk2.0 libglfw3 libglfw3-dev libpulse-dev```
 
 ```mkdir build && cd build && cmake ..```
 

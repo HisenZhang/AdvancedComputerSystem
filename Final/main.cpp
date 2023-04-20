@@ -3,13 +3,24 @@
 #include <iostream>
 #include <string>
 
-// TODO:
-// - Implement different filter types
-// - Benchmarking
-// - Center convolution
-// - Normalize post convolution?
-// - Test on linux again
-// - Deploy new release
+// Future work:
+// - Finish hackaudio: https://www.hackaudio.com/digital-signal-processing/
+// - More audio effects
+//   - https://dsp.stackexchange.com/questions/62242/how-to-chose-a-kernel-function-for-a-fir-low-pass-filter-in-audio-processing
+//   - https://mynewmicrophone.com/full-list-audio-effects-processes-for-mixing-production/
+//   - https://github.com/ar1st0crat/NWaves
+//   - https://users.dimi.uniud.it/~antonio.dangelo/MMS/materials/Guide_to_Digital_Signal_Process.pdf
+// - Precise clip editing
+// - View waveform after each effect
+// - Enable/Disable checkbox on each effect
+// - Drag to reorder effects
+// - Play/Pause/Scrub
+// - Harsher/Clearer separators between effect GUIs
+// - Save and load project files
+// - SIMD-ize the non-SIMD functions
+// - Add knobs and vertical sliders to make the GUI more diegetic
+// - Convolutions are commutative, so apply them asynchronously?
+// - IIR Filters: https://www.advsolned.com/difference-between-iir-and-fir-filters-a-practical-design-guide/
 
 struct PlotInput
 {
@@ -38,6 +49,8 @@ struct PlotInput
 
 int main(int, char**)
 {
+    InitDSP();
+
     glfwSetErrorCallback([](int error, const char* description) {
         std::cerr << "GLFW Error " << error << ": " << description << "\n";
     });
@@ -243,7 +256,16 @@ int main(int, char**)
                 const float combo_width = width * 0.12f;
                 ImGui::SetNextItemWidth(combo_width);
 
-                const char* effectNames[] = { "Delay", "Derivative" };
+                const char* effectNames[] =
+                {
+                    "Delay",
+                    "Derivative",
+                    "Peak Normalization",
+                    "RMS Normalization",
+                    "Reverse",
+                    "Gain",
+                    "DC Offset",
+                };
                 static int effectIndex = 0;
                 ImGui::Combo("##effectNames", &effectIndex, effectNames, IM_ARRAYSIZE(effectNames));
                 ImGui::SameLine();
@@ -251,6 +273,11 @@ int main(int, char**)
                 {
                     if (effectIndex == 0) effects.emplace_back(new DelayEffect);
                     else if (effectIndex == 1) effects.emplace_back(new DerivativeEffect);
+                    else if (effectIndex == 2) effects.emplace_back(new PeakNormalizationEffect);
+                    else if (effectIndex == 3) effects.emplace_back(new RMSNormalizationEffect);
+                    else if (effectIndex == 4) effects.emplace_back(new ReverseEffect);
+                    else if (effectIndex == 5) effects.emplace_back(new GainEffect);
+                    else if (effectIndex == 6) effects.emplace_back(new DC_OffsetEffect);
                 }
 
                 if (bFilterThreadRunning)
@@ -260,7 +287,7 @@ int main(int, char**)
                 }
 
                 static bool bUseAVX = true;
-                static bool bFilterThreadStartedThisTime = false;
+                static bool bFilterThreadStartedThisFrame = false;
                 static bool bFilterThreadWasRunning = false;
                 if (ImGui::Button("Apply", ImVec2(128, 45)))
                 {
@@ -275,7 +302,7 @@ int main(int, char**)
                         {
                             bFilterThreadWasRunning = true;
                             bFilterThreadRunning.store(true);
-                            bFilterThreadStartedThisTime = true;
+                            bFilterThreadStartedThisFrame = true;
 
                             outputSignal.data.clear();
 
@@ -298,7 +325,7 @@ int main(int, char**)
                     bFilterThreadWasRunning = false;
                 }
 
-                if (bFilterThreadRunning && !bFilterThreadStartedThisTime)
+                if (bFilterThreadRunning && !bFilterThreadStartedThisFrame)
                 {
                     ImGui::PopItemFlag();
                     ImGui::PopStyleVar();
@@ -306,7 +333,7 @@ int main(int, char**)
                     ImSpinner::SpinnerAng("Spinner", 16.0f, 6.0f, ImSpinner::white, ImColor(255, 255, 255, 128), 4.0f, TAU / 4.0f);
                 }
 
-                bFilterThreadStartedThisTime = false;
+                bFilterThreadStartedThisFrame = false;
             }
 
             // Output Waveform
@@ -451,9 +478,9 @@ int main(int, char**)
                 ImPlot::EndSubplots();
             }
 
-            enum class WaveFormType { SINE, SQUARE, TRIANGLE, SAW, COUNT };
+            enum class WaveFormType { SINE, SQUARE, TRIANGLE, SAW, WHITE_NOISE, COUNT };
             static int waveFormType = (int)WaveFormType::SINE;
-            const char* waveFormNames[(int)WaveFormType::COUNT] = { "Sine", "Square", "Triangle", "Saw" };
+            const char* waveFormNames[(int)WaveFormType::COUNT] = { "Sine", "Square", "Triangle", "Saw", "White Noise" };
             const char* waveFormName = (waveFormType >= 0 && waveFormType < (int)WaveFormType::COUNT) ? waveFormNames[waveFormType] : "Unknown";
             ImGui::SliderInt("Wave Form", &waveFormType, 0, (int)(WaveFormType::COUNT) - 1, waveFormName);
 
@@ -470,6 +497,7 @@ int main(int, char**)
                 else if (waveFormType == (int)WaveFormType::SQUARE) generator = SquareGenerator;
                 else if (waveFormType == (int)WaveFormType::TRIANGLE) generator = TriangleGenerator;
                 else if (waveFormType == (int)WaveFormType::SAW) generator = SawGenerator;
+                else if (waveFormType == (int)WaveFormType::WHITE_NOISE) generator = WhiteNoiseGenerator;
 
                 inputSignal.sampleRate = GenerateSignal(generator, generatorFrequency, generatorSampleRate, generatorDuration, inputSignal.data);
                 inPlotInput = PlotInput(&inputSignal);
