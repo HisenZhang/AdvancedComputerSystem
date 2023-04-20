@@ -45,7 +45,7 @@ unset GTK_PATH
 compile:
 
 ```
-g++ benchmark.cpp -o build/benchmark -O3 -DBENCHMARK -mavx -lpulse-simple -lpulse
+g++ benchmark.cpp -o build/benchmark -O3 -DBENCHMARK -mavx -pthread -lpulse-simple -lpulse
 ```
 
 SIMD and vanilla method:
