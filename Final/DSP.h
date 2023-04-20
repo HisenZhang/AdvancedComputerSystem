@@ -154,7 +154,7 @@ void applyFirFilterAVXParallelWorker(int id, const FilterInput &input, std::vect
         }
         else
         {
-            // or we save memory bandwidth by using = only
+            // or we save memory bandwidth by using = only to eliminate read
             outSignal[i + index] = std::accumulate(result.begin(), result.end(), 0.f);
         }
     }
