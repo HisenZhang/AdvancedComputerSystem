@@ -34,7 +34,7 @@ Install dependencies (you may need more than these packages):
 
 Now, run make or open the generated VisualStudio solution to select the ```DSP``` build target.
 
-If you are using VSCode, and see "symbol lookup error: /snap/core20/current/lib/x86_64-linux-gnu/libpthread.so.0: undefined symbol: __libc_pthread_init, version GLIBC_PRIVATE", run the command below:
+If you are using VS Code, and see "symbol lookup error: /snap/core20/current/lib/x86_64-linux-gnu/libpthread.so.0: undefined symbol: __libc_pthread_init, version GLIBC_PRIVATE", run the command below:
 
 ```
 unset GTK_PATH
@@ -42,7 +42,7 @@ unset GTK_PATH
 
 ## Benchmark
 
-compile:
+Compilation:
 
 ```
 g++ benchmark.cpp -o build/benchmark -O3 -DBENCHMARK -mavx -pthread -lpulse-simple -lpulse
@@ -57,5 +57,5 @@ build/benchmark DURATION
 The numpy and scipy testing:
 
 ```
-python2 benchmark.py DURATION
+python3 benchmark.py DURATION
 ```
